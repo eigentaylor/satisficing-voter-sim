@@ -446,6 +446,10 @@ input[type="range"]::-webkit-slider-thumb:hover {
     display: block;
 }
 
+#tab-weighted-overall.has-empty .chart-row {
+    display: none;
+}
+
 .chart-desc {
     color: var(--muted);
     font-size: 0.88rem;

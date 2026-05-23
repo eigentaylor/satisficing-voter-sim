@@ -142,6 +142,28 @@ $$\overline{\text{VSE}}_M = \int_0^1 \int_0^1 \text{VSE}_M(t,\ell) \cdot p(t,\el
 
 This reduces to a single scalar per method, directly comparable to standard VSE. The explicit prior $p$ forces the analyst to state their assumptions about the voter population — a feature rather than a bug. We report results under several priors to show sensitivity.
 
+**Weighted improvement (new grouped plot).** The weighted-improvement view converts weighted average VSE into a baseline-relative quantity.
+For any method $M$, baseline $B$, and prior $p(t,\ell)$:
+
+$$\Delta_p(M \mid B) = \overline{\text{VSE}}_{M,p} - \overline{\text{VSE}}_{B,p}$$
+
+where
+
+$$\overline{\text{VSE}}_{M,p} = \int_0^1 \int_0^1 \text{VSE}_M(t,\ell) \, p(t,\ell) \, dt \, d\ell$$
+
+The grouped weighted-improvement plot uses two baselines side-by-side for each reform target:
+
+- vs Plurality: $\Delta_p(M \mid \text{Plurality})$
+- vs Approval: $\Delta_p(M \mid \text{Approval})$
+
+Interpretation:
+
+- Positive bar: reform target outperforms the baseline under that prior.
+- Zero: parity with the baseline.
+- Negative bar: reform target underperforms the baseline.
+
+Because the bars are shown for multiple priors, this plot is a direct robustness check of reform gains to assumptions about the voter population. It answers not just “which method is best on average?”, but “how large is the gain from moving away from a given baseline, and does that gain persist across plausible electorates?”
+
 ---
 
 ## Simulation Parameters

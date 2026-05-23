@@ -839,6 +839,128 @@ function plotWeighted(res, tVals, lVals, methods) {
     }
 }
 
+function weightedPriors() {
+    return [
+        { id: 'chart-wo-1', label: 'Uniform prior', fn: () => 1 },
+        { id: 'chart-wo-2', label: 'Informed & exhausted\n(high t, low ℓ)', fn: (t, l) => Math.exp(3 * t - 3 * (1 - l)) },
+        { id: 'chart-wo-3', label: 'Energetic & uninformed\n(low t, high ℓ)', fn: (t, l) => Math.exp(-3 * t + 3 * l) },
+        { id: 'chart-wo-4', label: 'Uninformed & exhausted\n(low t, low ℓ)', fn: (t, l) => Math.exp(-3 * t + 3 * (1 - l)) },
+    ];
+}
+
+function weightedMethodScores(res, tVals, lVals, names, weightFn) {
+    const nl = lVals.length;
+    const nt = tVals.length;
+    let wSum = 0;
+    const weighted = {};
+    for (const name of names) weighted[name] = 0;
+
+    for (let li = 0; li < nl; li++) {
+        for (let ti = 0; ti < nt; ti++) {
+            const w = weightFn(tVals[ti], lVals[li]);
+            wSum += w;
+            for (const name of names) weighted[name] += res[name][li][ti] * w;
+        }
+    }
+
+    if (wSum <= 0) return Object.fromEntries(names.map(name => [name, 0]));
+    for (const name of names) weighted[name] /= wSum;
+    return weighted;
+}
+
+function plotWeightedOverallImprovement(res, tVals, lVals, methods) {
+    const names = Object.keys(methods);
+    const tab = document.getElementById('tab-weighted-overall');
+
+    const hasPlurality = names.includes('Plurality');
+    const hasApproval = names.includes('Approval');
+    const targets = names.filter(m => m !== 'Plurality' && m !== 'Approval');
+    const emptyMsg = document.getElementById('weighted-overall-empty');
+
+    if (!hasPlurality || !hasApproval || targets.length === 0) {
+        ['chart-wo-1', 'chart-wo-2', 'chart-wo-3', 'chart-wo-4'].forEach(id => destroyChart(id));
+        if (emptyMsg) {
+            emptyMsg.style.display = 'block';
+            const missing = [
+                !hasPlurality ? 'Plurality' : null,
+                !hasApproval ? 'Approval' : null,
+            ].filter(Boolean);
+            if (targets.length === 0) {
+                emptyMsg.textContent = 'Enable at least one reform target (RCV, Borda, Score, STAR, or Condorcet) to view weighted improvement.';
+            } else if (missing.length > 0) {
+                emptyMsg.textContent = `Enable ${missing.join(' and ')} to view weighted improvement vs baseline methods.`;
+            }
+        }
+        if (tab) tab.classList.add('has-empty');
+        return;
+    }
+
+    if (emptyMsg) emptyMsg.style.display = 'none';
+    if (tab) tab.classList.remove('has-empty');
+
+    const priors = weightedPriors();
+    for (const p of priors) {
+        const scores = weightedMethodScores(res, tVals, lVals, names, p.fn);
+        const pluralityVals = targets.map(name => scores[name] - scores['Plurality']);
+        const approvalVals = targets.map(name => scores[name] - scores['Approval']);
+        const combined = pluralityVals.concat(approvalVals);
+
+        newChart(p.id, 'bar', {
+            labels: targets,
+            datasets: [
+                {
+                    label: 'vs Plurality',
+                    data: pluralityVals,
+                    backgroundColor: METHOD_COLORS['Plurality'] + 'cc',
+                    borderColor: METHOD_COLORS['Plurality'],
+                    borderWidth: 1,
+                },
+                {
+                    label: 'vs Approval',
+                    data: approvalVals,
+                    backgroundColor: METHOD_COLORS['Approval'] + 'cc',
+                    borderColor: METHOD_COLORS['Approval'],
+                    borderWidth: 1,
+                },
+            ],
+        }, {
+            responsive: true,
+            maintainAspectRatio: false,
+            animation: false,
+            plugins: {
+                legend: {
+                    display: true,
+                    labels: { color: '#d8d8d8', boxWidth: 12, font: { size: 11 } },
+                },
+                title: { display: true, text: p.label.replace('\n', ' '), color: '#d8d8d8', font: { size: 11 } },
+                barValueLabels: {
+                    fontSize: 11,
+                    offset: 4,
+                    formatter: value => Number(value).toFixed(3),
+                },
+                topTierStars: {
+                    enabled: false,
+                    alpha: 0.5,
+                    tiered: true,
+                    maxStars: 3,
+                    minTopHeadroom: 0.16,
+                },
+            },
+            scales: {
+                x: {
+                    ticks: { color: '#888', font: { size: 10 } },
+                    grid: { color: '#282828' },
+                },
+                y: {
+                    ticks: { color: '#888' },
+                    grid: { color: '#282828' },
+                    title: { display: true, text: 'Weighted improvement score', color: '#888' },
+                },
+            },
+        });
+    }
+}
+
 // ── Approval diff heatmaps ────────────────────────────────────────────────────
 
 function plotApprovalDiff(res, tVals, lVals, methods) {
@@ -906,6 +1028,7 @@ function renderChartsFromState(state) {
     plotRobustness(res, tVals, lVals, methods);
     plotScenarios(res, tVals, lVals, methods);
     plotWeighted(res, tVals, lVals, methods);
+    plotWeightedOverallImprovement(res, tVals, lVals, methods);
     plotApprovalDiff(res, tVals, lVals, methods);
     updateStarLegendVisibility();
 }

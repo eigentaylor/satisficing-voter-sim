@@ -33,7 +33,6 @@ N_L = N_T
 T_VALS = np.linspace(0.0, 1.0, N_T)
 L_VALS = np.linspace(1/N_CANDS, 1.0, N_L)   # min = consider 1 candidate
 OUTPUT_DIR = 'output/plots'
-USE_SCORE_INSTEAD_OF_BORDA = False
 
 # ── dark palette ──────────────────────────────────────────────────────────────
 BG       = '#0d0d0d'
@@ -46,7 +45,7 @@ COLORS = {
     'Plurality' : '#e05555',
     'RCV'       : '#e09944',
     'Borda'     : '#d4c94a',
-    'SCORE'     : '#d4c94a',
+    'Score'     : '#b8e04a',
     'Approval'  : '#4ec96a',
     'STAR'      : '#4ab8e0',
     'Condorcet' : '#9b6be0',
@@ -208,21 +207,18 @@ def irv(pu, l):
 
     return int(np.where(remaining)[0][0])
 
-def build_methods(use_score_instead_of_borda=False):
-    methods = {
+def build_methods():
+    return {
         'Plurality' : plurality,
         'RCV'       : irv,
+        'Borda'     : borda,
+        'Score'     : score,
         'Approval'  : approval,
         'STAR'      : star,
         'Condorcet' : condorcet,
     }
-    if use_score_instead_of_borda:
-        methods['SCORE'] = score
-    else:
-        methods['Borda'] = borda
-    return methods
 
-METHODS = build_methods(USE_SCORE_INSTEAD_OF_BORDA)
+METHODS = build_methods()
 
 # ── simulation grid ───────────────────────────────────────────────────────────
 
@@ -282,12 +278,106 @@ def _style_ax(ax):
     ax.title.set_color(TEXT_C)
     ax.grid(color=GRID_C, linewidth=0.5, linestyle='--', alpha=0.6)
 
+def _detect_tier_mins(values, alpha=0.5):
+    """Return tier boundary minimums (mirrors JS detectTierMins)."""
+    clean = sorted(v for v in values if np.isfinite(v))
+    if len(clean) == 0:
+        return []
+    if len(clean) == 1:
+        return [clean[0]]
+    gaps = [clean[i+1] - clean[i] for i in range(len(clean)-1)]
+    threshold = alpha * np.mean(gaps)
+    mins = [clean[0]]
+    for i, g in enumerate(gaps):
+        if g > threshold:
+            mins.append(clean[i+1])
+    return mins
+
+def _annotate_stars(ax, bars, values, alpha=0.5, max_stars=3,
+                   color='#ffd54a', size=11, label_gap=0.038, star_spacing=0.16):
+    """Draw tiered gold stars above bars (mirrors JS TOP_TIER_STARS_PLUGIN tiered mode).
+
+    Each bar gets stars equal to its tier index (capped at max_stars).
+    Tier 0 (lowest cluster) gets 0 stars; each higher tier adds one more.
+    Tiers are computed from all finite values, but only strictly positive bars can earn stars.
+    Positive tiers are renumbered after filtering, but the lowest positive tier still gets 0 stars.
+    """
+    tier_mins = _detect_tier_mins(values, alpha)
+    positive_tier_mins = [tier_min for tier_min in tier_mins if tier_min > 0]
+    for bar, v in zip(bars, values):
+        if not np.isfinite(v) or v <= 0:
+            continue
+        positive_tier_idx = sum(v >= tier_min for tier_min in positive_tier_mins) - 1
+        stars = max(0, positive_tier_idx)
+        stars = min(stars, max_stars)
+        if stars <= 0:
+            continue
+        cx = bar.get_x() + bar.get_width() / 2
+        y = v + label_gap
+        for i in range(stars):
+            x_off = (i - (stars - 1) / 2) * star_spacing
+            ax.plot(cx + x_off, y, marker='*', color=color, markersize=size,
+                    linestyle='none', clip_on=False, zorder=5)
+
 def _cb(fig, im, ax, label='VSE'):
     cb = fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
     cb.ax.yaxis.set_tick_params(color=TEXT_C)
     plt.setp(cb.ax.yaxis.get_ticklabels(), color=TEXT_C)
     cb.set_label(label, color=TEXT_C)
     cb.outline.set_edgecolor(GRID_C)
+
+def _weighted_priors(tv, lv):
+    """Return the shared prior grids used for weighted summaries over (t, l)."""
+    T, L = np.meshgrid(tv, lv)     # both (nl, nt)
+    return [
+        ('Uniform prior', np.ones_like(T)),
+        ('Informed & exhausted\n(high t, low ℓ)', np.exp(3 * T - 3 * (1 - L))),
+        ('Energetic & uninformed\n(low t, high ℓ)', np.exp(-3 * T + 3 * L)),
+        ('Uninformed & exhausted\n(low t, low ℓ)', np.exp(-3 * T + 3 * (1 - L))),
+    ]
+
+def _weighted_method_scores(res, weights):
+    w = weights / weights.sum()
+    return {m: float((res[m] * w).sum()) for m in METHODS}
+
+def _label_bars(ax, bars, values, pad=0.008, fmt='{:.3f}', positive_va='bottom', negative_va='top'):
+    for bar, v in zip(bars, values):
+        x = bar.get_x() + bar.get_width() / 2
+        if v >= 0:
+            y = v + pad
+            va = positive_va
+        else:
+            y = v - pad
+            va = negative_va
+        ax.text(x, y, fmt.format(v), ha='center', va=va, color=TEXT_C, fontsize=7.5)
+
+def _plot_delta_heatmaps(res, tv, lv, base_method, compared_methods, title, path):
+    n = len(compared_methods)
+    extent = [tv[0], tv[-1], lv[0], lv[-1]]
+    vmax = max(np.max(np.abs(res[name] - res[base_method])) for name in compared_methods)
+    vmax = max(vmax, 1e-9)
+
+    fig, axes = plt.subplots(1, n, figsize=(4.2 * n, 4.5), facecolor=BG)
+    if n == 1:
+        axes = [axes]
+    fig.suptitle(title, color=TEXT_C, fontsize=11, y=1.02)
+
+    for ax, name in zip(axes, compared_methods):
+        _style_ax(ax)
+        diff = res[name] - res[base_method]
+        im = ax.imshow(diff, origin='lower', aspect='auto', extent=extent,
+                       cmap='RdYlGn', vmin=-vmax, vmax=vmax)
+        ax.contour(diff, levels=[0], colors=[TEXT_C], linewidths=0.8,
+                   extent=extent, origin='lower')
+        ax.set_title(f'{name} − {base_method}')
+        ax.set_xlabel('Knowledge  t')
+        ax.set_ylabel('Energy  ℓ')
+        _cb(fig, im, ax, label='ΔVSE')
+
+    plt.tight_layout()
+    fig.savefig(path, dpi=150, bbox_inches='tight', facecolor=BG)
+    plt.close()
+    print(f'  ✓  {path}')
 
 # ── plot 1: axis slices ───────────────────────────────────────────────────────
 
@@ -323,12 +413,16 @@ def plot_slices(res, tv, lv, path='out_slices.png'):
 # ── plot 2: heatmaps ──────────────────────────────────────────────────────────
 
 def plot_heatmaps(res, tv, lv, path='out_heatmaps.png'):
-    fig = _dark_fig(17, 10)
-    gs  = gridspec.GridSpec(2, 3, figure=fig, hspace=0.38, wspace=0.32)
+    import math
+    n_methods = len(METHODS)
+    n_cols    = 3
+    n_rows    = math.ceil(n_methods / n_cols)
+    fig = _dark_fig(17, 5.5 * n_rows)
+    gs  = gridspec.GridSpec(n_rows, n_cols, figure=fig, hspace=0.38, wspace=0.32)
     extent = [tv[0], tv[-1], lv[0], lv[-1]]
 
     for idx, name in enumerate(METHODS):
-        ax = fig.add_subplot(gs[idx // 3, idx % 3])
+        ax = fig.add_subplot(gs[idx // n_cols, idx % n_cols])
         _style_ax(ax)
         im = ax.imshow(res[name], origin='lower', aspect='auto',
                        extent=extent, cmap='viridis', vmin=0, vmax=1)
@@ -336,6 +430,10 @@ def plot_heatmaps(res, tv, lv, path='out_heatmaps.png'):
         ax.set_xlabel('Knowledge  t')
         ax.set_ylabel('Energy  ℓ')
         _cb(fig, im, ax)
+
+    # hide any unused cells in the last row
+    for idx in range(n_methods, n_rows * n_cols):
+        fig.add_subplot(gs[idx // n_cols, idx % n_cols]).set_visible(False)
 
     fig.suptitle('VSE Surface per Method', color=TEXT_C, fontsize=13, y=1.01)
     fig.savefig(path, dpi=150, bbox_inches='tight', facecolor=BG)
@@ -398,7 +496,8 @@ def plot_scenarios(res, tv, lv, path='out_scenarios.png'):
         for bar, v in zip(bars, vals):
             ax.text(bar.get_x() + bar.get_width()/2, v + 0.012,
                     f'{v:.2f}', ha='center', va='bottom', color=TEXT_C, fontsize=7.5)
-        ax.set_ylim(0, 1.12)
+        ax.set_ylim(0, 1.24)
+        _annotate_stars(ax, bars, vals, label_gap=0.06)
 
     axes[0].set_ylabel('VSE', color=TEXT_C)
     fig.suptitle('VSE at Key (t, ℓ) Scenarios', color=TEXT_C, fontsize=13, y=1.01)
@@ -440,48 +539,189 @@ def plot_approval_diff(res, tv, lv, path='out_approval_diff.png'):
 # ── plot 6: weighted avg VSE under different priors ───────────────────────────
 
 def plot_weighted(res, tv, lv, path='out_weighted.png'):
-    """Weighted average VSE under three priors over (t, l) space."""
-    T, L = np.meshgrid(tv, lv)     # both (nl, nt)
+    """Weighted average VSE under four priors over (t, l) space."""
+    priors = _weighted_priors(tv, lv)
 
-    def w_avg(weights):
-        w = weights / weights.sum()
-        return {m: (res[m] * w).sum() for m in METHODS}
-
-    # Prior 1: uniform
-    p1 = np.ones_like(T)
-    # Prior 2: high t, low l  (informed but easily exhausted)
-    p2 = np.exp(3*T - 3*(1-L))
-    # Prior 3: low t, high l  (energetic but uninformed)
-    p3 = np.exp(-3*T + 3*L)
-
-    priors = [
-        ('Uniform prior', p1),
-        ('Informed & exhausted\n(high t, low ℓ)', p2),
-        ('Uninformed & energetic\n(low t, high ℓ)', p3),
-    ]
-
-    fig, axes = plt.subplots(1, 3, figsize=(15, 5.5), sharey=True, facecolor=BG)
+    fig, axes = plt.subplots(2, 2, figsize=(15, 10), sharey=True, facecolor=BG)
+    axes = axes.flatten()
     for ax, (label, w) in zip(axes, priors):
         _style_ax(ax)
-        avgs = w_avg(w)
+        avgs = _weighted_method_scores(res, w)
         vals  = [avgs[m] for m in METHODS]
         clrs  = [COLORS[m] for m in METHODS]
         bars  = ax.bar(list(METHODS.keys()), vals, color=clrs, width=0.65,
                        edgecolor=GRID_C, linewidth=0.5)
         ax.set_title(label, fontsize=9)
         ax.set_xticklabels(list(METHODS.keys()), rotation=35, ha='right', fontsize=8)
-        for bar, v in zip(bars, vals):
-            ax.text(bar.get_x() + bar.get_width()/2, v + 0.008,
-                    f'{v:.3f}', ha='center', va='bottom', color=TEXT_C, fontsize=7.5)
-        ax.set_ylim(0, 1.05)
+        label_pad = 0.01
+        _label_bars(ax, bars, vals, pad=label_pad)
+        ax.set_ylim(0, 1.18)
+        _annotate_stars(ax, bars, vals, label_gap=0.075)
 
     axes[0].set_ylabel('Weighted average VSE', color=TEXT_C)
+    axes[2].set_ylabel('Weighted average VSE', color=TEXT_C)
     fig.suptitle('Weighted Average VSE Under Different Priors on (t, ℓ)',
                  color=TEXT_C, fontsize=12, y=1.01)
     plt.tight_layout()
     fig.savefig(path, dpi=150, bbox_inches='tight', facecolor=BG)
     plt.close()
     print(f'  ✓  {path}')
+
+# ── plot 7: weighted improvement over reform baselines ───────────────────────
+
+def _plot_weighted_improvement_against(res, tv, lv, base_method, target_methods, path):
+    """Weighted VSE gain relative to a single reform baseline under shared priors."""
+    priors = _weighted_priors(tv, lv)
+    fig, axes = plt.subplots(2, 2, figsize=(15, 10), sharey=True, facecolor=BG)
+    axes = axes.flatten()
+
+    all_vals = []
+    for _, weights in priors:
+        scores = _weighted_method_scores(res, weights)
+        all_vals.extend(scores[name] - scores[base_method] for name in target_methods)
+
+    span = max(all_vals) - min(all_vals)
+    pad = max(0.01, 0.2 * max(span, max(abs(v) for v in all_vals)))
+    y_min = min(all_vals) - pad
+    y_max = max(all_vals) + pad
+
+    for ax, (prior_label, weights) in zip(axes, priors):
+        _style_ax(ax)
+        scores = _weighted_method_scores(res, weights)
+        vals = [scores[name] - scores[base_method] for name in target_methods]
+        clrs = [COLORS[name] for name in target_methods]
+        bars = ax.bar(target_methods, vals, color=clrs, width=0.65,
+                      edgecolor=GRID_C, linewidth=0.5)
+        ax.axhline(0, color=MUTED, lw=1, ls='--')
+        ax.set_title(prior_label, fontsize=9)
+        ax.set_xticklabels(target_methods, rotation=35, ha='right', fontsize=8)
+        label_pad = max(0.012, pad * 0.12)
+        _label_bars(ax, bars, vals, pad=label_pad)
+        ax.set_ylim(y_min, y_max)
+        _annotate_stars(ax, bars, vals, label_gap=label_pad + max(0.02, pad * 0.18))
+
+    axes[0].set_ylabel('Weighted improvement score', color=TEXT_C)
+    axes[2].set_ylabel('Weighted improvement score', color=TEXT_C)
+    fig.suptitle(
+        f'Weighted Improvement vs {base_method}\n'
+        '(integral of ΔVSE against each prior; positive = reform target better)',
+        color=TEXT_C, fontsize=12, y=1.01
+    )
+    plt.tight_layout()
+    fig.savefig(path, dpi=150, bbox_inches='tight', facecolor=BG)
+    plt.close()
+    print(f'  ✓  {path}')
+
+def plot_weighted_plurality_improvement(res, tv, lv,
+                                        path='out_weighted_plurality_improvement.png'):
+    _plot_weighted_improvement_against(
+        res, tv, lv,
+        base_method='Plurality',
+        target_methods=[m for m in METHODS if m != 'Plurality'],
+        path=path,
+    )
+
+def plot_weighted_approval_improvement(res, tv, lv,
+                                       path='out_weighted_approval_improvement.png'):
+    _plot_weighted_improvement_against(
+        res, tv, lv,
+        base_method='Approval',
+        target_methods=[m for m in METHODS if m not in ('Plurality', 'Approval')],
+        path=path,
+    )
+
+def plot_weighted_overall_improvement(res, tv, lv,
+                                      path='out_weighted_overall_improvement.png'):
+    """Grouped comparison of weighted improvement vs Plurality and Approval."""
+    priors = _weighted_priors(tv, lv)
+    target_methods = [m for m in METHODS if m not in ('Plurality', 'Approval')]
+    fig, axes = plt.subplots(2, 2, figsize=(15, 10), sharey=True, facecolor=BG)
+    axes = axes.flatten()
+
+    all_vals = []
+    for _, weights in priors:
+        scores = _weighted_method_scores(res, weights)
+        all_vals.extend(scores[name] - scores['Plurality'] for name in target_methods)
+        all_vals.extend(scores[name] - scores['Approval'] for name in target_methods)
+
+    span = max(all_vals) - min(all_vals)
+    pad = max(0.01, 0.2 * max(span, max(abs(v) for v in all_vals)))
+    y_min = min(all_vals) - pad
+    y_max = max(all_vals) + pad
+    x = np.arange(len(target_methods))
+    width = 0.34
+
+    for ax, (prior_label, weights) in zip(axes, priors):
+        _style_ax(ax)
+        scores = _weighted_method_scores(res, weights)
+        plurality_vals = [scores[name] - scores['Plurality'] for name in target_methods]
+        approval_vals = [scores[name] - scores['Approval'] for name in target_methods]
+
+        bars_plurality = ax.bar(
+            x - width / 2,
+            plurality_vals,
+            width=width,
+            color=COLORS['Plurality'],
+            alpha=0.85,
+            edgecolor=GRID_C,
+            linewidth=0.5,
+            label='vs Plurality',
+        )
+        bars_approval = ax.bar(
+            x + width / 2,
+            approval_vals,
+            width=width,
+            color=COLORS['Approval'],
+            alpha=0.85,
+            edgecolor=GRID_C,
+            linewidth=0.5,
+            label='vs Approval',
+        )
+
+        ax.axhline(0, color=MUTED, lw=1, ls='--')
+        ax.set_title(prior_label, fontsize=9)
+        ax.set_xticks(x)
+        ax.set_xticklabels(target_methods, rotation=35, ha='right', fontsize=8)
+        ax.set_ylim(y_min, y_max)
+
+        label_pad = max(0.012, pad * 0.12)
+        _label_bars(ax, bars_plurality, plurality_vals, pad=label_pad, fmt='{:.3f}')
+        _label_bars(ax, bars_approval, approval_vals, pad=label_pad, fmt='{:.3f}')
+
+    axes[0].set_ylabel('Weighted improvement score', color=TEXT_C)
+    axes[2].set_ylabel('Weighted improvement score', color=TEXT_C)
+    axes[0].legend(facecolor=PANEL, edgecolor=GRID_C, labelcolor=TEXT_C, fontsize=9)
+    fig.suptitle(
+        'Overall Weighted Improvement by Reform Baseline\n'
+        '(grouped bars compare each reform target against Plurality and Approval)',
+        color=TEXT_C, fontsize=12, y=1.01
+    )
+    plt.tight_layout()
+    fig.savefig(path, dpi=150, bbox_inches='tight', facecolor=BG)
+    plt.close()
+    print(f'  ✓  {path}')
+
+# ── plot 8: reform delta heatmaps ─────────────────────────────────────────────
+
+def plot_plurality_delta_heatmap(res, tv, lv, path='out_plurality_delta_heatmap.png'):
+    others = [m for m in METHODS if m != 'Plurality']
+    _plot_delta_heatmaps(
+        res, tv, lv,
+        base_method='Plurality',
+        compared_methods=others,
+        title='Method VSE minus Plurality\n(green = reform better, red = Plurality better)',
+        path=path,
+    )
+
+def plot_approval_delta_heatmap(res, tv, lv, path='out_approval_delta_heatmap.png'):
+    others = [m for m in METHODS if m not in ('Plurality', 'Approval')]
+    _plot_delta_heatmaps(
+        res, tv, lv,
+        base_method='Approval',
+        compared_methods=others,
+        title='Non-Plurality Method VSE minus Approval\n(green = reform better, red = Approval better)',
+        path=path,
+    )
 
 # ── main ──────────────────────────────────────────────────────────────────────
 
@@ -502,6 +742,20 @@ if __name__ == '__main__':
     plot_scenarios(res, T_VALS, L_VALS, path=os.path.join(OUTPUT_DIR, 'out_scenarios.png'))
     plot_approval_diff(res, T_VALS, L_VALS, path=os.path.join(OUTPUT_DIR, 'out_approval_diff.png'))
     plot_weighted(res, T_VALS, L_VALS, path=os.path.join(OUTPUT_DIR, 'out_weighted.png'))
+    plot_weighted_plurality_improvement(
+        res, T_VALS, L_VALS,
+        path=os.path.join(OUTPUT_DIR, 'out_weighted_plurality_improvement.png')
+    )
+    plot_weighted_approval_improvement(
+        res, T_VALS, L_VALS,
+        path=os.path.join(OUTPUT_DIR, 'out_weighted_approval_improvement.png')
+    )
+    plot_weighted_overall_improvement(
+        res, T_VALS, L_VALS,
+        path=os.path.join(OUTPUT_DIR, 'out_weighted_overall_improvement.png')
+    )
+    plot_plurality_delta_heatmap(res, T_VALS, L_VALS, path=os.path.join(OUTPUT_DIR, 'out_plurality_delta_heatmap.png'))
+    plot_approval_delta_heatmap(res, T_VALS, L_VALS, path=os.path.join(OUTPUT_DIR, 'out_approval_delta_heatmap.png'))
     plot_elapsed = time.time() - plot_t0
     total_elapsed = time.time() - script_t0
 

@@ -138,6 +138,7 @@
                 <button class="tab-btn" data-tab="robustness">Robustness</button>
                 <button class="tab-btn" data-tab="scenarios">Scenarios</button>
                 <button class="tab-btn" data-tab="weighted">Weighted VSE</button>
+                <button class="tab-btn" data-tab="weighted-overall">Weighted Improvement</button>
                 <button class="tab-btn" data-tab="approval-diff">Approval Δ</button>
             </div>
 
@@ -195,6 +196,21 @@
                     <div class="chart-wrap"><canvas id="chart-w-2"></canvas></div>
                     <div class="chart-wrap"><canvas id="chart-w-3"></canvas></div>
                     <div class="chart-wrap"><canvas id="chart-w-4"></canvas></div>
+                </div>
+            </div>
+
+            <!-- Weighted overall improvement -->
+            <div class="tab-pane" id="tab-weighted-overall">
+                <p class="chart-desc">
+                    Weighted VSE improvement for reform methods over baseline methods.
+                    Grouped bars compare each reform against Plurality and Approval under four priors on $(t,\ell)$.
+                </p>
+                <p id="weighted-overall-empty" class="chart-desc" style="display:none"></p>
+                <div class="chart-row stacked">
+                    <div class="chart-wrap"><canvas id="chart-wo-1"></canvas></div>
+                    <div class="chart-wrap"><canvas id="chart-wo-2"></canvas></div>
+                    <div class="chart-wrap"><canvas id="chart-wo-3"></canvas></div>
+                    <div class="chart-wrap"><canvas id="chart-wo-4"></canvas></div>
                 </div>
             </div>
 
