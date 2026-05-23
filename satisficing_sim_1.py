@@ -483,7 +483,8 @@ def plot_scenarios(res, tv, lv, path='out_scenarios.png'):
         ('Both low\n(t=0.3, ℓ=0.35)', idx(tv,0.3), idx(lv,0.35)),
     ]
 
-    fig, axes = plt.subplots(1, 4, figsize=(18, 5.5), sharey=True, facecolor=BG)
+    fig, axes = plt.subplots(2, 2, figsize=(12, 10), sharey=True, facecolor=BG)
+    axes = axes.flatten()
 
     for ax, (label, ti, li) in zip(axes, scenarios):
         _style_ax(ax)
@@ -500,6 +501,7 @@ def plot_scenarios(res, tv, lv, path='out_scenarios.png'):
         _annotate_stars(ax, bars, vals, label_gap=0.06)
 
     axes[0].set_ylabel('VSE', color=TEXT_C)
+    axes[2].set_ylabel('VSE', color=TEXT_C)
     fig.suptitle('VSE at Key (t, ℓ) Scenarios', color=TEXT_C, fontsize=13, y=1.01)
     plt.tight_layout()
     fig.savefig(path, dpi=150, bbox_inches='tight', facecolor=BG)
