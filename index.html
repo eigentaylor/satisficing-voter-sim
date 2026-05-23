@@ -137,6 +137,7 @@
                 <button class="tab-btn" data-tab="heatmaps">Heat Maps</button>
                 <button class="tab-btn" data-tab="robustness">Robustness</button>
                 <button class="tab-btn" data-tab="scenarios">Scenarios</button>
+                <button class="tab-btn" data-tab="scenario-overall">Scenario Improvement</button>
                 <button class="tab-btn" data-tab="weighted">Weighted VSE</button>
                 <button class="tab-btn" data-tab="weighted-overall">Weighted Improvement</button>
                 <button class="tab-btn" data-tab="approval-diff">Approval Δ</button>
@@ -180,6 +181,21 @@
                     <div class="chart-wrap"><canvas id="chart-sc-2"></canvas></div>
                     <div class="chart-wrap"><canvas id="chart-sc-3"></canvas></div>
                     <div class="chart-wrap"><canvas id="chart-sc-4"></canvas></div>
+                </div>
+            </div>
+
+            <!-- Scenario overall improvement -->
+            <div class="tab-pane" id="tab-scenario-overall">
+                <p class="chart-desc">
+                    Scenario VSE improvement for reform methods over baseline methods.
+                    Grouped bars compare each reform against Plurality and Approval at four $(t,\ell)$ scenarios.
+                </p>
+                <p id="scenario-overall-empty" class="chart-desc" style="display:none"></p>
+                <div class="chart-row stacked">
+                    <div class="chart-wrap"><canvas id="chart-so-1"></canvas></div>
+                    <div class="chart-wrap"><canvas id="chart-so-2"></canvas></div>
+                    <div class="chart-wrap"><canvas id="chart-so-3"></canvas></div>
+                    <div class="chart-wrap"><canvas id="chart-so-4"></canvas></div>
                 </div>
             </div>
 

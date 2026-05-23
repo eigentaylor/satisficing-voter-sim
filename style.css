@@ -450,6 +450,10 @@ input[type="range"]::-webkit-slider-thumb:hover {
     display: none;
 }
 
+#tab-scenario-overall.has-empty .chart-row {
+    display: none;
+}
+
 .chart-desc {
     color: var(--muted);
     font-size: 0.88rem;

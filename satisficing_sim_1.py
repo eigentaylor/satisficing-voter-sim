@@ -344,6 +344,25 @@ def _weighted_method_scores(res, weights):
     w = weights / weights.sum()
     return {m: float((res[m] * w).sum()) for m in METHODS}
 
+def _scenario_points(tv, lv):
+    """Return shared named scenarios as (label, t_idx, l_idx)."""
+    def idx(arr, v):
+        return int(np.argmin(np.abs(arr - v)))
+
+    return [
+        ('Ideal\n(t=1, ℓ=1)',           idx(tv, 1.0), idx(lv, 1.0)),
+        ('Low energy\n(t=1, ℓ=0.35)',   idx(tv, 1.0), idx(lv, 0.35)),
+        ('Low knowledge\n(t=0.3, ℓ=1)', idx(tv, 0.3), idx(lv, 1.0)),
+        ('Both low\n(t=0.3, ℓ=0.35)',   idx(tv, 0.3), idx(lv, 0.35)),
+    ]
+
+def _scenario_method_scores(res, scenarios):
+    """Return per-scenario method scores keyed by scenario label."""
+    return {
+        label: {m: float(res[m][li, ti]) for m in METHODS}
+        for (label, ti, li) in scenarios
+    }
+
 def _label_bars(ax, bars, values, pad=0.008, fmt='{:.3f}', positive_va='bottom', negative_va='top'):
     for bar, v in zip(bars, values):
         x = bar.get_x() + bar.get_width() / 2
@@ -477,15 +496,7 @@ def plot_robustness(res, tv, lv, path='out_robustness.png'):
 # ── plot 4: scenario bar charts ───────────────────────────────────────────────
 
 def plot_scenarios(res, tv, lv, path='out_scenarios.png'):
-    def idx(arr, v):
-        return int(np.argmin(np.abs(arr - v)))
-
-    scenarios = [
-        ('Ideal\n(t=1, ℓ=1)',          idx(tv,1.0), idx(lv,1.0)),
-        ('Low energy\n(t=1, ℓ=0.35)',  idx(tv,1.0), idx(lv,0.35)),
-        ('Low knowledge\n(t=0.3, ℓ=1)',idx(tv,0.3), idx(lv,1.0)),
-        ('Both low\n(t=0.3, ℓ=0.35)', idx(tv,0.3), idx(lv,0.35)),
-    ]
+    scenarios = _scenario_points(tv, lv)
 
     fig, axes = plt.subplots(2, 2, figsize=(12, 10), sharey=True, facecolor=BG)
     axes = axes.flatten()
@@ -507,6 +518,144 @@ def plot_scenarios(res, tv, lv, path='out_scenarios.png'):
     axes[0].set_ylabel('VSE', color=TEXT_C)
     axes[2].set_ylabel('VSE', color=TEXT_C)
     fig.suptitle('VSE at Key (t, ℓ) Scenarios', color=TEXT_C, fontsize=13, y=1.01)
+    plt.tight_layout()
+    fig.savefig(path, dpi=150, bbox_inches='tight', facecolor=BG)
+    plt.close()
+    print(f'  ✓  {path}')
+
+# ── plot 4b: scenario improvement vs reform baselines ───────────────────────
+
+def _plot_scenario_improvement_against(res, tv, lv, base_method, target_methods, path):
+    """Scenario VSE gain relative to a single reform baseline."""
+    scenarios = _scenario_points(tv, lv)
+    scenario_scores = _scenario_method_scores(res, scenarios)
+
+    fig, axes = plt.subplots(2, 2, figsize=(12, 10), sharey=True, facecolor=BG)
+    axes = axes.flatten()
+
+    all_vals = []
+    for label, _, _ in scenarios:
+        scores = scenario_scores[label]
+        all_vals.extend(scores[name] - scores[base_method] for name in target_methods)
+
+    span = max(all_vals) - min(all_vals)
+    pad = max(0.01, 0.2 * max(span, max(abs(v) for v in all_vals)))
+    y_min = min(all_vals) - pad
+    y_max = max(all_vals) + pad
+
+    for ax, (label, _, _) in zip(axes, scenarios):
+        _style_ax(ax)
+        scores = scenario_scores[label]
+        vals = [scores[name] - scores[base_method] for name in target_methods]
+        clrs = [COLORS[name] for name in target_methods]
+        bars = ax.bar(target_methods, vals, color=clrs, width=0.65,
+                      edgecolor=GRID_C, linewidth=0.5)
+        ax.axhline(0, color=MUTED, lw=1, ls='--')
+        ax.set_title(label, fontsize=9)
+        ax.set_xticklabels(target_methods, rotation=35, ha='right', fontsize=8)
+        label_pad = max(0.012, pad * 0.12)
+        _label_bars(ax, bars, vals, pad=label_pad)
+        ax.set_ylim(y_min, y_max)
+        _annotate_stars(ax, bars, vals, label_gap=label_pad + max(0.02, pad * 0.18))
+
+    axes[0].set_ylabel('Scenario improvement score', color=TEXT_C)
+    axes[2].set_ylabel('Scenario improvement score', color=TEXT_C)
+    fig.suptitle(
+        f'Scenario Improvement vs {base_method}\n'
+        '(ΔVSE at each scenario; positive = reform target better)',
+        color=TEXT_C, fontsize=12, y=1.01
+    )
+    plt.tight_layout()
+    fig.savefig(path, dpi=150, bbox_inches='tight', facecolor=BG)
+    plt.close()
+    print(f'  ✓  {path}')
+
+def plot_scenario_plurality_improvement(res, tv, lv,
+                                        path='out_scenario_plurality_improvement.png'):
+    _plot_scenario_improvement_against(
+        res, tv, lv,
+        base_method='Plurality',
+        target_methods=[m for m in METHODS if m != 'Plurality'],
+        path=path,
+    )
+
+def plot_scenario_approval_improvement(res, tv, lv,
+                                       path='out_scenario_approval_improvement.png'):
+    _plot_scenario_improvement_against(
+        res, tv, lv,
+        base_method='Approval',
+        target_methods=[m for m in METHODS if m not in ('Plurality', 'Approval')],
+        path=path,
+    )
+
+def plot_scenario_overall_improvement(res, tv, lv,
+                                      path='out_scenario_overall_improvement.png'):
+    """Grouped comparison of scenario improvement vs Plurality and Approval."""
+    scenarios = _scenario_points(tv, lv)
+    scenario_scores = _scenario_method_scores(res, scenarios)
+    target_methods = [m for m in METHODS if m not in ('Plurality', 'Approval')]
+
+    fig, axes = plt.subplots(2, 2, figsize=(12, 10), sharey=True, facecolor=BG)
+    axes = axes.flatten()
+
+    all_vals = []
+    for label, _, _ in scenarios:
+        scores = scenario_scores[label]
+        all_vals.extend(scores[name] - scores['Plurality'] for name in target_methods)
+        all_vals.extend(scores[name] - scores['Approval'] for name in target_methods)
+
+    span = max(all_vals) - min(all_vals)
+    pad = max(0.01, 0.2 * max(span, max(abs(v) for v in all_vals)))
+    y_min = min(all_vals) - pad
+    y_max = max(all_vals) + pad
+    x = np.arange(len(target_methods))
+    width = 0.34
+
+    for ax, (label, _, _) in zip(axes, scenarios):
+        _style_ax(ax)
+        scores = scenario_scores[label]
+        plurality_vals = [scores[name] - scores['Plurality'] for name in target_methods]
+        approval_vals = [scores[name] - scores['Approval'] for name in target_methods]
+
+        bars_plurality = ax.bar(
+            x - width / 2,
+            plurality_vals,
+            width=width,
+            color=COLORS['Plurality'],
+            alpha=0.85,
+            edgecolor=GRID_C,
+            linewidth=0.5,
+            label='vs Plurality',
+        )
+        bars_approval = ax.bar(
+            x + width / 2,
+            approval_vals,
+            width=width,
+            color=COLORS['Approval'],
+            alpha=0.85,
+            edgecolor=GRID_C,
+            linewidth=0.5,
+            label='vs Approval',
+        )
+
+        ax.axhline(0, color=MUTED, lw=1, ls='--')
+        ax.set_title(label, fontsize=9)
+        ax.set_xticks(x)
+        ax.set_xticklabels(target_methods, rotation=35, ha='right', fontsize=8)
+        ax.set_ylim(y_min, y_max)
+
+        label_pad = max(0.012, pad * 0.12)
+        _label_bars(ax, bars_plurality, plurality_vals, pad=label_pad, fmt='{:.3f}')
+        _label_bars(ax, bars_approval, approval_vals, pad=label_pad, fmt='{:.3f}')
+
+    axes[0].set_ylabel('Scenario improvement score', color=TEXT_C)
+    axes[2].set_ylabel('Scenario improvement score', color=TEXT_C)
+    axes[0].legend(facecolor=PANEL, edgecolor=GRID_C, labelcolor=TEXT_C, fontsize=9)
+    fig.suptitle(
+        'Overall Scenario Improvement by Reform Baseline\n'
+        '(grouped bars compare each reform target against Plurality and Approval)',
+        color=TEXT_C, fontsize=12, y=1.01
+    )
     plt.tight_layout()
     fig.savefig(path, dpi=150, bbox_inches='tight', facecolor=BG)
     plt.close()
@@ -746,6 +895,18 @@ if __name__ == '__main__':
     plot_heatmaps(res, T_VALS, L_VALS, path=os.path.join(OUTPUT_DIR, 'out_heatmaps.png'))
     plot_robustness(res, T_VALS, L_VALS, path=os.path.join(OUTPUT_DIR, 'out_robustness.png'))
     plot_scenarios(res, T_VALS, L_VALS, path=os.path.join(OUTPUT_DIR, 'out_scenarios.png'))
+    plot_scenario_plurality_improvement(
+        res, T_VALS, L_VALS,
+        path=os.path.join(OUTPUT_DIR, 'out_scenario_plurality_improvement.png')
+    )
+    plot_scenario_approval_improvement(
+        res, T_VALS, L_VALS,
+        path=os.path.join(OUTPUT_DIR, 'out_scenario_approval_improvement.png')
+    )
+    plot_scenario_overall_improvement(
+        res, T_VALS, L_VALS,
+        path=os.path.join(OUTPUT_DIR, 'out_scenario_overall_improvement.png')
+    )
     plot_approval_diff(res, T_VALS, L_VALS, path=os.path.join(OUTPUT_DIR, 'out_approval_diff.png'))
     plot_weighted(res, T_VALS, L_VALS, path=os.path.join(OUTPUT_DIR, 'out_weighted.png'))
     plot_weighted_plurality_improvement(

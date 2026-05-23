@@ -761,14 +761,21 @@ function closestIdx(arr, v) {
     return best;
 }
 
+function scenarioSpecs(tVals, lVals, includeId = false) {
+    const specs = [
+        { label: 'Ideal\n(t=1, ℓ=1)', ti: closestIdx(tVals, 1.0), li: closestIdx(lVals, 1.0) },
+        { label: 'Low energy\n(t=1, ℓ=0.35)', ti: closestIdx(tVals, 1.0), li: closestIdx(lVals, 0.35) },
+        { label: 'Low knowledge\n(t=0.3, ℓ=1)', ti: closestIdx(tVals, 0.3), li: closestIdx(lVals, 1.0) },
+        { label: 'Both low\n(t=0.3, ℓ=0.35)', ti: closestIdx(tVals, 0.3), li: closestIdx(lVals, 0.35) },
+    ];
+
+    if (!includeId) return specs;
+    return specs.map((s, i) => ({ ...s, id: `chart-sc-${i + 1}` }));
+}
+
 function plotScenarios(res, tVals, lVals, methods) {
     const showStars = shouldShowTierStars();
-    const scenarios = [
-        { label: 'Ideal\n(t=1, ℓ=1)', ti: closestIdx(tVals, 1.0), li: closestIdx(lVals, 1.0), id: 'chart-sc-1' },
-        { label: 'Low energy\n(t=1, ℓ=0.35)', ti: closestIdx(tVals, 1.0), li: closestIdx(lVals, 0.35), id: 'chart-sc-2' },
-        { label: 'Low knowledge\n(t=0.3, ℓ=1)', ti: closestIdx(tVals, 0.3), li: closestIdx(lVals, 1.0), id: 'chart-sc-3' },
-        { label: 'Both low\n(t=0.3, ℓ=0.35)', ti: closestIdx(tVals, 0.3), li: closestIdx(lVals, 0.35), id: 'chart-sc-4' },
-    ];
+    const scenarios = scenarioSpecs(tVals, lVals, true);
     const names = Object.keys(methods);
 
     for (const sc of scenarios) {
@@ -786,6 +793,102 @@ function plotScenarios(res, tVals, lVals, methods) {
             { enabled: showStars, alpha: 0.5, tiered: true, maxStars: 3, minTopHeadroom: 0.18 },
             scenarioValues
         ));
+    }
+}
+
+function plotScenarioOverallImprovement(res, tVals, lVals, methods) {
+    const names = Object.keys(methods);
+    const tab = document.getElementById('tab-scenario-overall');
+
+    const hasPlurality = names.includes('Plurality');
+    const hasApproval = names.includes('Approval');
+    const targets = names.filter(m => m !== 'Plurality' && m !== 'Approval');
+    const emptyMsg = document.getElementById('scenario-overall-empty');
+
+    if (!hasPlurality || !hasApproval || targets.length === 0) {
+        ['chart-so-1', 'chart-so-2', 'chart-so-3', 'chart-so-4'].forEach(id => destroyChart(id));
+        if (emptyMsg) {
+            emptyMsg.style.display = 'block';
+            const missing = [
+                !hasPlurality ? 'Plurality' : null,
+                !hasApproval ? 'Approval' : null,
+            ].filter(Boolean);
+            if (targets.length === 0) {
+                emptyMsg.textContent = 'Enable at least one reform target (RCV, Borda, Score, STAR, or Condorcet) to view scenario improvement.';
+            } else if (missing.length > 0) {
+                emptyMsg.textContent = `Enable ${missing.join(' and ')} to view scenario improvement vs baseline methods.`;
+            }
+        }
+        if (tab) tab.classList.add('has-empty');
+        return;
+    }
+
+    if (emptyMsg) emptyMsg.style.display = 'none';
+    if (tab) tab.classList.remove('has-empty');
+
+    const scenarios = scenarioSpecs(tVals, lVals, true).map((sc, i) => ({
+        ...sc,
+        id: `chart-so-${i + 1}`,
+    }));
+
+    for (const sc of scenarios) {
+        const pluralityVals = targets.map(name => res[name][sc.li][sc.ti] - res['Plurality'][sc.li][sc.ti]);
+        const approvalVals = targets.map(name => res[name][sc.li][sc.ti] - res['Approval'][sc.li][sc.ti]);
+        const combined = pluralityVals.concat(approvalVals);
+
+        newChart(sc.id, 'bar', {
+            labels: targets,
+            datasets: [
+                {
+                    label: 'vs Plurality',
+                    data: pluralityVals,
+                    backgroundColor: METHOD_COLORS['Plurality'] + 'cc',
+                    borderColor: METHOD_COLORS['Plurality'],
+                    borderWidth: 1,
+                },
+                {
+                    label: 'vs Approval',
+                    data: approvalVals,
+                    backgroundColor: METHOD_COLORS['Approval'] + 'cc',
+                    borderColor: METHOD_COLORS['Approval'],
+                    borderWidth: 1,
+                },
+            ],
+        }, {
+            responsive: true,
+            maintainAspectRatio: false,
+            animation: false,
+            plugins: {
+                legend: {
+                    display: true,
+                    labels: { color: '#d8d8d8', boxWidth: 12, font: { size: 11 } },
+                },
+                title: { display: true, text: sc.label.replace('\n', ' '), color: '#d8d8d8', font: { size: 11 } },
+                barValueLabels: {
+                    fontSize: 11,
+                    offset: 4,
+                    formatter: value => Number(value).toFixed(3),
+                },
+                topTierStars: {
+                    enabled: false,
+                    alpha: 0.5,
+                    tiered: true,
+                    maxStars: 3,
+                    minTopHeadroom: 0.16,
+                },
+            },
+            scales: {
+                x: {
+                    ticks: { color: '#888', font: { size: 10 } },
+                    grid: { color: '#282828' },
+                },
+                y: {
+                    ticks: { color: '#888' },
+                    grid: { color: '#282828' },
+                    title: { display: true, text: 'Scenario improvement score', color: '#888' },
+                },
+            },
+        });
     }
 }
 
@@ -1044,6 +1147,7 @@ function renderChartsFromState(state) {
     plotScenarios(res, tVals, lVals, methods);
     plotWeighted(res, tVals, lVals, methods);
     plotWeightedOverallImprovement(res, tVals, lVals, methods);
+    plotScenarioOverallImprovement(res, tVals, lVals, methods);
     plotApprovalDiff(res, tVals, lVals, methods);
     updateStarLegendVisibility();
 }
