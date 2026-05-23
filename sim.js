@@ -813,11 +813,19 @@ function plotWeighted(res, tVals, lVals, methods) {
         return out;
     }
 
+    const centerSigma = 0.2;
+
     const priors = [
         { id: 'chart-w-1', label: 'Uniform prior', fn: () => 1 },
-        { id: 'chart-w-2', label: 'Informed & exhausted\n(high t, low ℓ)', fn: (t, l) => Math.exp(3 * t - 3 * (1 - l)) },
-        { id: 'chart-w-3', label: 'Energetic & uninformed\n(low t, high ℓ)', fn: (t, l) => Math.exp(-3 * t + 3 * l) },
-        { id: 'chart-w-4', label: 'Uninformed & exhausted\n(low t, low ℓ)', fn: (t, l) => Math.exp(-3 * t + 3 * (1 - l)) },
+        { id: 'chart-w-2', label: 'Ideal focus\n(high t, high ℓ)', fn: (t, l) => Math.exp(3 * t + 3 * l) },
+        {
+            id: 'chart-w-3',
+            label: 'Center focus\n(mid t, mid ℓ)',
+            fn: (t, l) => Math.exp(-(((t - 0.5) ** 2 + (l - 0.5) ** 2) / (2 * centerSigma ** 2))),
+        },
+        { id: 'chart-w-4', label: 'Informed & exhausted\n(high t, low ℓ)', fn: (t, l) => Math.exp(3 * t - 3 * (1 - l)) },
+        { id: 'chart-w-5', label: 'Energetic & uninformed\n(low t, high ℓ)', fn: (t, l) => Math.exp(-3 * t + 3 * l) },
+        { id: 'chart-w-6', label: 'Uninformed & exhausted\n(low t, low ℓ)', fn: (t, l) => Math.exp(-3 * t + 3 * (1 - l)) },
     ];
 
     for (const p of priors) {
@@ -840,11 +848,18 @@ function plotWeighted(res, tVals, lVals, methods) {
 }
 
 function weightedPriors() {
+    const centerSigma = 0.2;
     return [
         { id: 'chart-wo-1', label: 'Uniform prior', fn: () => 1 },
-        { id: 'chart-wo-2', label: 'Informed & exhausted\n(high t, low ℓ)', fn: (t, l) => Math.exp(3 * t - 3 * (1 - l)) },
-        { id: 'chart-wo-3', label: 'Energetic & uninformed\n(low t, high ℓ)', fn: (t, l) => Math.exp(-3 * t + 3 * l) },
-        { id: 'chart-wo-4', label: 'Uninformed & exhausted\n(low t, low ℓ)', fn: (t, l) => Math.exp(-3 * t + 3 * (1 - l)) },
+        { id: 'chart-wo-2', label: 'Ideal focus\n(high t, high ℓ)', fn: (t, l) => Math.exp(3 * t + 3 * l) },
+        {
+            id: 'chart-wo-3',
+            label: 'Center focus\n(mid t, mid ℓ)',
+            fn: (t, l) => Math.exp(-(((t - 0.5) ** 2 + (l - 0.5) ** 2) / (2 * centerSigma ** 2))),
+        },
+        { id: 'chart-wo-4', label: 'Informed & exhausted\n(high t, low ℓ)', fn: (t, l) => Math.exp(3 * t - 3 * (1 - l)) },
+        { id: 'chart-wo-5', label: 'Energetic & uninformed\n(low t, high ℓ)', fn: (t, l) => Math.exp(-3 * t + 3 * l) },
+        { id: 'chart-wo-6', label: 'Uninformed & exhausted\n(low t, low ℓ)', fn: (t, l) => Math.exp(-3 * t + 3 * (1 - l)) },
     ];
 }
 
@@ -878,7 +893,7 @@ function plotWeightedOverallImprovement(res, tVals, lVals, methods) {
     const emptyMsg = document.getElementById('weighted-overall-empty');
 
     if (!hasPlurality || !hasApproval || targets.length === 0) {
-        ['chart-wo-1', 'chart-wo-2', 'chart-wo-3', 'chart-wo-4'].forEach(id => destroyChart(id));
+        ['chart-wo-1', 'chart-wo-2', 'chart-wo-3', 'chart-wo-4', 'chart-wo-5', 'chart-wo-6'].forEach(id => destroyChart(id));
         if (emptyMsg) {
             emptyMsg.style.display = 'block';
             const missing = [

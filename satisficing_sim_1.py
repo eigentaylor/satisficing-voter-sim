@@ -329,8 +329,12 @@ def _cb(fig, im, ax, label='VSE'):
 def _weighted_priors(tv, lv):
     """Return the shared prior grids used for weighted summaries over (t, l)."""
     T, L = np.meshgrid(tv, lv)     # both (nl, nt)
+    sigma = 0.2
+    center_focus = np.exp(-(((T - 0.5) ** 2 + (L - 0.5) ** 2) / (2 * sigma ** 2)))
     return [
         ('Uniform prior', np.ones_like(T)),
+        ('Ideal focus\n(high t, high ℓ)', np.exp(3 * T + 3 * L)),
+        ('Center focus\n(mid t, mid ℓ)', center_focus),
         ('Informed & exhausted\n(high t, low ℓ)', np.exp(3 * T - 3 * (1 - L))),
         ('Energetic & uninformed\n(low t, high ℓ)', np.exp(-3 * T + 3 * L)),
         ('Uninformed & exhausted\n(low t, low ℓ)', np.exp(-3 * T + 3 * (1 - L))),
@@ -544,7 +548,7 @@ def plot_weighted(res, tv, lv, path='out_weighted.png'):
     """Weighted average VSE under four priors over (t, l) space."""
     priors = _weighted_priors(tv, lv)
 
-    fig, axes = plt.subplots(2, 2, figsize=(15, 10), sharey=True, facecolor=BG)
+    fig, axes = plt.subplots(2, 3, figsize=(20, 10), sharey=True, facecolor=BG)
     axes = axes.flatten()
     for ax, (label, w) in zip(axes, priors):
         _style_ax(ax)
@@ -574,7 +578,7 @@ def plot_weighted(res, tv, lv, path='out_weighted.png'):
 def _plot_weighted_improvement_against(res, tv, lv, base_method, target_methods, path):
     """Weighted VSE gain relative to a single reform baseline under shared priors."""
     priors = _weighted_priors(tv, lv)
-    fig, axes = plt.subplots(2, 2, figsize=(15, 10), sharey=True, facecolor=BG)
+    fig, axes = plt.subplots(2, 3, figsize=(20, 10), sharey=True, facecolor=BG)
     axes = axes.flatten()
 
     all_vals = []
@@ -637,7 +641,7 @@ def plot_weighted_overall_improvement(res, tv, lv,
     """Grouped comparison of weighted improvement vs Plurality and Approval."""
     priors = _weighted_priors(tv, lv)
     target_methods = [m for m in METHODS if m not in ('Plurality', 'Approval')]
-    fig, axes = plt.subplots(2, 2, figsize=(15, 10), sharey=True, facecolor=BG)
+    fig, axes = plt.subplots(2, 3, figsize=(20, 10), sharey=True, facecolor=BG)
     axes = axes.flatten()
 
     all_vals = []
