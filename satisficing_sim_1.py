@@ -425,7 +425,7 @@ def plot_heatmaps(res, tv, lv, path='out_heatmaps.png'):
         ax = fig.add_subplot(gs[idx // n_cols, idx % n_cols])
         _style_ax(ax)
         im = ax.imshow(res[name], origin='lower', aspect='auto',
-                       extent=extent, cmap='viridis', vmin=0, vmax=1)
+                       extent=extent, cmap='viridis', vmin=0, vmax=1) # type: ignore
         ax.set_title(name)
         ax.set_xlabel('Knowledge  t')
         ax.set_ylabel('Energy  ℓ')
