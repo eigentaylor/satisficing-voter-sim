@@ -108,13 +108,13 @@ where $N_{x \succ y}$ is the number of voters who rank $x$ above $y$. The winner
 
 Approval has a structural advantage in this model that ranking and scoring methods do not. Define voter $i$'s *natural approval count*
 
-$$k_i^* = \left|\left\{c : \tilde{u}_i(c) > \bar{\tilde{u}}_i\right\}\right|$$
+$$k_i^* = \left|\left\\{c : \tilde{u}_i(c) > \bar{\tilde{u}}_i\right\\}\right|$$
 
-For any $\ell$ such that $K \geq k_i^*$, the voter's approval ballot is identical to their full-energy ballot — no information is lost. Call $\ell_i^* = k_i^*/m$ the voter's *critical energy*. Below $\ell_i^*$, the ballot is truncated; at or above it, the voter's full sincere preference is expressed regardless of $\ell$.
+For any $\ell$ such that $K \geq k_i^\*$, the voter's approval ballot is identical to their full-energy ballot — no information is lost. Call $\ell_i^\* = k_i^\*/m$ the voter's *critical energy*. Below $\ell_i^\*$, the ballot is truncated; at or above it, the voter's full sincere preference is expressed regardless of $\ell$.
 
 For ranking and scoring methods there is no analogous threshold: every reduction in $K$ strictly removes information, and the loss is monotone in $\ell$.
 
-In the spatial model with utilities drawn symmetrically, roughly half the candidates sit above $\bar{\tilde{u}}_i$ on average, so $\mathbb{E}[k_i^*] \approx m/2$ and $\mathbb{E}[\ell_i^*] \approx 1/2$. A voter with strong preferences — who genuinely approves of only 1 or 2 candidates — has a much lower critical energy $\ell_i^*$, meaning their ballot saturates at low $\ell$. This structural feature is the formal content of the intuition that approval is "lower friction": many voters express their complete honest preference well before $\ell = 1$.
+In the spatial model with utilities drawn symmetrically, roughly half the candidates sit above $\bar{\tilde{u}}_i$ on average, so $\mathbb{E}[k_i^\*] \approx m/2$ and $\mathbb{E}[\ell_i^\*] \approx 1/2$. A voter with strong preferences — who genuinely approves of only 1 or 2 candidates — has a much lower critical energy $\ell_i^\*$, meaning their ballot saturates at low $\ell$. This structural feature is the formal content of the intuition that approval is "lower friction": many voters express their complete honest preference well before $\ell = 1$.
 
 ---
 
@@ -132,7 +132,7 @@ Standard VSE is the special case $\text{VSE}_M(1, 1)$.
 
 **Robustness region.** For a threshold $\tau \in [0,1]$, the robustness region of method $M$ is
 
-$$R_M(\tau) = \frac{\text{Area}\{(t, \ell) \in [0,1]^2 : \text{VSE}_M(t, \ell) \geq \tau\}}{\text{Area}([0,1]^2)}$$
+$$R_M(\tau) = \frac{\text{Area}\\{(t, \ell) \in [0,1]^2 : \text{VSE}_M(t, \ell) \geq \tau\\}}{\text{Area}([0,1]^2)}$$
 
 $R_M(\tau)$ is the fraction of the parameter space where $M$ performs adequately. A method with larger $R_M(\tau)$ for all $\tau$ robustly dominates another.
 
