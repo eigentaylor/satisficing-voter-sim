@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>The Satisficing Voter Model</title>
+    <link rel="stylesheet" href="style.css" />
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+    <!-- MathJax for equations -->
+    <script>
+        MathJax = {
+            tex: { inlineMath: [['$', '$']], displayMath: [['$$', '$$']] },
+            options: { skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre'] }
+        };
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js" async></script>
+</head>
+
+<body>
+    <header>
+        <h1>The Satisficing Voter Model</h1>
+        <p class="subtitle">
+            How do epistemic noise and participation friction affect voting methods?
+        </p>
+    </header>
+
+    <main>
+        <!-- ── Introduction ── -->
+        <section class="card" id="intro">
+            <h2>What is this?</h2>
+            <p>
+                Standard VSE simulations assume perfect voters: everyone knows their preferences and fills
+                out their ballot completely. Real voters face two kinds of imperfection:
+            </p>
+            <div class="two-col">
+                <div class="concept-box">
+                    <h3>📚 Epistemic Noise &nbsp;<em>t</em></h3>
+                    <p>
+                        A voter may not know their own utilities — especially for unfamiliar candidates.
+                        The knowledge parameter $t \in [0,1]$ interpolates between pure noise ($t=0$) and
+                        perfect self-knowledge ($t=1$).
+                    </p>
+                    <div class="formula">$$\tilde{u}_i = t \cdot u_i + (1-t) \cdot \eta_i, \quad \eta_i \sim
+                        \mathcal{N}(\bar{u}, \sigma_u^2)$$</div>
+                </div>
+                <div class="concept-box">
+                    <h3>⚡ Participation Friction &nbsp;<em>ℓ</em></h3>
+                    <p>
+                        Even a well-informed voter may not fill out their entire ballot.
+                        The energy parameter $\ell \in [0,1]$ controls what fraction of candidates each voter considers:
+                        $K = \max(1, \lceil \ell \cdot m \rceil)$.
+                    </p>
+                    <div class="formula">$$K = \max\!\left(1,\ \left\lceil \ell \cdot m \right\rceil\right)$$</div>
+                </div>
+            </div>
+            <p>
+                VSE (Voter Satisfaction Efficiency) measures how often a method elects the utility-maximizing
+                candidate, normalised so 0 = random winner and 1 = always optimal.
+            </p>
+        </section>
+
+        <!-- ── Controls ── -->
+        <section class="card" id="controls">
+            <h2>Parameters</h2>
+            <div class="controls-grid">
+                <div class="control-group">
+                    <label>Voters <span id="nv-val" class="val-badge">120</span></label>
+                    <input type="range" id="nv" min="30" max="300" step="30" value="120" />
+                </div>
+                <div class="control-group">
+                    <label>Candidates <span id="nc-val" class="val-badge">8</span></label>
+                    <input type="range" id="nc" min="3" max="12" step="1" value="8" />
+                </div>
+                <div class="control-group">
+                    <label>Trials per grid point <span id="ntr-val" class="val-badge">150</span></label>
+                    <input type="range" id="ntr" min="50" max="500" step="50" value="150" />
+                </div>
+                <div class="control-group">
+                    <label>Grid resolution <span id="ng-val" class="val-badge">10</span></label>
+                    <input type="range" id="ng" min="6" max="16" step="2" value="10" />
+                </div>
+                <div class="control-group">
+                    <label>Spatial dimensions <span id="nd-val" class="val-badge">2</span></label>
+                    <input type="range" id="nd" min="1" max="4" step="1" value="2" />
+                </div>
+            </div>
+
+            <div class="methods-toggle">
+                <h3>Methods to include</h3>
+                <div class="toggle-row">
+                    <label class="toggle"><input type="checkbox" id="m-plurality"
+                            checked /><span>Plurality</span></label>
+                    <label class="toggle"><input type="checkbox" id="m-irv" checked /><span>RCV</span></label>
+                    <label class="toggle"><input type="checkbox" id="m-approval" checked /><span>Approval</span></label>
+                    <label class="toggle"><input type="checkbox" id="m-borda" checked /><span>Borda</span></label>
+                    <label class="toggle"><input type="checkbox" id="m-score" checked /><span>Score</span></label>
+                    <label class="toggle"><input type="checkbox" id="m-star" checked /><span>STAR</span></label>
+                    <label class="toggle"><input type="checkbox" id="m-condorcet"
+                            checked /><span>Condorcet</span></label>
+                </div>
+            </div>
+
+            <div class="display-toggle">
+                <h3>Display options</h3>
+                <div class="toggle-row">
+                    <label class="toggle"><input type="checkbox" id="show-stars" /><span>Show tier stars on bar
+                            charts</span></label>
+                </div>
+            </div>
+
+            <div class="run-row">
+                <button id="run-btn" class="btn-primary">▶ Run Simulation</button>
+                <button id="cancel-btn" class="btn-danger" disabled>■ Cancel</button>
+                <div id="progress-section">
+                    <div id="progress-label-row">
+                        <span id="progress-label">Ready</span>
+                    </div>
+                    <div id="progress-bar-wrap">
+                        <div id="progress-bar"></div>
+                    </div>
+                </div>
+            </div>
+            <p id="sim-status" class="status-msg"></p>
+        </section>
+
+        <!-- ── Tabs ── -->
+        <section class="card" id="results" style="display:none">
+            <div class="tab-bar">
+                <button class="tab-btn active" data-tab="slices">Axis Slices</button>
+                <button class="tab-btn" data-tab="heatmaps">Heat Maps</button>
+                <button class="tab-btn" data-tab="robustness">Robustness</button>
+                <button class="tab-btn" data-tab="scenarios">Scenarios</button>
+                <button class="tab-btn" data-tab="weighted">Weighted VSE</button>
+                <button class="tab-btn" data-tab="approval-diff">Approval Δ</button>
+            </div>
+
+            <!-- Slices -->
+            <div class="tab-pane active" id="tab-slices">
+                <p class="chart-desc">
+                    Left: VSE vs knowledge $t$ when voters fill out their entire ballot ($\ell=1$).
+                    Right: VSE vs energy $\ell$ when voters have perfect knowledge ($t=1$).
+                </p>
+                <div class="chart-row stacked">
+                    <div class="chart-wrap"><canvas id="chart-slice-t"></canvas></div>
+                    <div class="chart-wrap"><canvas id="chart-slice-l"></canvas></div>
+                </div>
+            </div>
+
+            <!-- Heatmaps -->
+            <div class="tab-pane" id="tab-heatmaps">
+                <p class="chart-desc">VSE as a 2-D function of $(t, \ell)$ for each method. Brighter = higher VSE.</p>
+                <div id="heatmap-container" class="heatmap-grid"></div>
+            </div>
+
+            <!-- Robustness -->
+            <div class="tab-pane" id="tab-robustness">
+                <p class="chart-desc">
+                    What fraction of the $(t,\ell)$ parameter space achieves VSE $\geq \tau$?
+                    Methods with higher curves are more robust to voter imperfections.
+                </p>
+                <div class="chart-wrap-full"><canvas id="chart-robustness"></canvas></div>
+            </div>
+
+            <!-- Scenarios -->
+            <div class="tab-pane" id="tab-scenarios">
+                <p class="chart-desc">VSE at four specific $(t,\ell)$ scenarios.</p>
+                <p id="star-legend-scenarios" class="chart-desc star-legend" style="display:none">★ Tier rank legend:
+                    more stars = higher performance tier.</p>
+                <div class="chart-row stacked">
+                    <div class="chart-wrap"><canvas id="chart-sc-1"></canvas></div>
+                    <div class="chart-wrap"><canvas id="chart-sc-2"></canvas></div>
+                    <div class="chart-wrap"><canvas id="chart-sc-3"></canvas></div>
+                    <div class="chart-wrap"><canvas id="chart-sc-4"></canvas></div>
+                </div>
+            </div>
+
+            <!-- Weighted -->
+            <div class="tab-pane" id="tab-weighted">
+                <p class="chart-desc">
+                    Weighted-average VSE under three priors over $(t, \ell)$ space — each prior
+                    represents a different assumption about the voter population.
+                </p>
+                <p id="star-legend-weighted" class="chart-desc star-legend" style="display:none">★ Tier rank legend:
+                    more stars = higher performance tier.</p>
+                <div class="chart-row stacked">
+                    <div class="chart-wrap"><canvas id="chart-w-1"></canvas></div>
+                    <div class="chart-wrap"><canvas id="chart-w-2"></canvas></div>
+                    <div class="chart-wrap"><canvas id="chart-w-3"></canvas></div>
+                    <div class="chart-wrap"><canvas id="chart-w-4"></canvas></div>
+                </div>
+            </div>
+
+            <!-- Approval diff -->
+            <div class="tab-pane" id="tab-approval-diff">
+                <p class="chart-desc">
+                    Approval VSE minus each other method across $(t,\ell)$ space.
+                    Green = Approval wins; red = other method wins.
+                </p>
+                <div id="diff-container" class="heatmap-grid"></div>
+            </div>
+        </section>
+
+        <!-- ── Explainer ── -->
+        <section class="card" id="explainer">
+            <h2>How it works</h2>
+            <details>
+                <summary>Spatial model & utility</summary>
+                <p>
+                    Voters and candidates are placed uniformly at random in $[-1,1]^d$,
+                    where $d$ is the selected spatial dimension.
+                    True utility is $u_i(c) = -\|v_i - p_c\|^2$ — negative squared distance.
+                    The utility-maximising candidate is $c^* = \arg\max_c \frac{1}{n}\sum_i u_i(c)$.
+                </p>
+            </details>
+            <details>
+                <summary>Noise model</summary>
+                <p>
+                    Each voter's perceived utility is
+                    $\tilde{u}_i = t \cdot u_i + (1-t) \cdot \eta_i$
+                    where $\eta_i \sim \mathcal{N}(\bar{u}, \sigma_u^2)^m$ is drawn once per voter and held fixed.
+                    This means even noisy voters have <em>internally consistent</em> beliefs.
+                </p>
+            </details>
+            <details>
+                <summary>Energy &amp; considered set</summary>
+                <p>
+                    Each voter considers only their top $K = \max(1, \lceil \ell \cdot m \rceil)$ candidates
+                    by perceived utility. Opinions on the remaining $m - K$ candidates are not expressed.
+                </p>
+            </details>
+            <details>
+                <summary>Ballot construction</summary>
+                <p>
+                    <strong>Plurality:</strong> vote for the single top perceived candidate.<br />
+                    <strong>RCV / Borda / Condorcet:</strong> rank the considered set in order of $\tilde{u}_i$.<br />
+                    <strong>Score / STAR:</strong> normalise $\tilde{u}_i$ within the considered set to $[0,5]$.<br />
+                    <strong>Approval:</strong> approve candidates in the considered set whose $\tilde{u}_i$ exceeds
+                    the voter's global personal mean (computed over all $m$ candidates).
+                </p>
+            </details>
+            <details>
+                <summary>How winners are counted (including Condorcet)</summary>
+                <p>
+                    <strong>Plurality:</strong> most top-choice votes wins.<br />
+                    <strong>Approval:</strong> most approvals wins.<br />
+                    <strong>Borda:</strong> ranked candidates get $K, K-1, \ldots, 1$ points (unranked get 0); highest
+                    total wins.<br />
+                    <strong>Score:</strong> highest total 0-5 score wins.<br />
+                    <strong>STAR:</strong> top two by total score advance; winner is preferred by more voters in the
+                    pairwise runoff based on their scores.<br />
+                    <strong>RCV:</strong> eliminate the lowest first-choice candidate each round; transfer to next
+                    ranked active choice; exhausted ballots drop out.<br />
+                    <strong>Condorcet:</strong> counted via <em>Minimax</em>: build pairwise margins from rankings and
+                    choose the candidate with the smallest worst pairwise defeat. This coincides with the true Condorcet
+                    winner when one exists, but still produces a result when there are cycles.
+                </p>
+            </details>
+            <details>
+                <summary>VSE formula</summary>
+                <p>
+                    $$\text{VSE}_M(t,\ell) = \frac{\mathbb{E}[\text{SW}(w_M)] -
+                    \mathbb{E}[\text{SW}(\text{random})]}{\mathbb{E}[\text{SW}(c^*)] -
+                    \mathbb{E}[\text{SW}(\text{random})]}$$
+                    Measured using <em>true</em> utilities even though voters act on $\tilde{u}$.
+                </p>
+            </details>
+            <details>
+                <summary>The Saturation Property (Approval)</summary>
+                <p>
+                    Approval has a structural advantage: once $K \geq k_i^*$ (voter $i$'s natural approval count),
+                    the ballot is identical to the full-energy ballot. For a typical voter
+                    $\mathbb{E}[k_i^*] \approx m/2$, so approval "saturates" near $\ell = 0.5$ on average.
+                    Ranking/scoring methods lose information monotonically as $\ell$ decreases.
+                </p>
+            </details>
+        </section>
+
+        <!-- ── Conclusions ── -->
+        <section class="card" id="conclusions">
+            <h2>Conclusions</h2>
+            <details class="conclusions-panel">
+                <summary>Read conclusions</summary>
+                <div class="conclusions-body">
+                    <p>
+                        Ranked Choice Voting (RCV) performs surprisingly poorly across the board. Its improvement over
+                        Plurality is quite small, particularly proportional to the administrative cost it has over
+                        methods like Approval, STAR, and Condorcet. It appears to be a very poor choice for a method
+                        when something like Approval is available that is simpler, more robust, and has much better
+                        performance across the board.
+                    </p>
+                    <p>
+                        Overall, Approval is generally the most robust method to voter imperfections, maintaining high
+                        relative performance even under extreme noise and low energy. In particular, Approval becomes
+                        the
+                        best method when voters are informed but lazy, and remains competitive even when voters are both
+                        uninformed and lazy.
+                    </p>
+                    <p>
+                        The fact that Approval does so well under low energy, whereas STAR and SCORE have major
+                        performance drops, has multiple implications:
+                    </p>
+                    <ul>
+                        <li>
+                            It suggests that bullet voting is even less of a problem for Approval than many critics
+                            assume, since even if voters refuse to approve more than a few candidates, Approval can
+                            still maintain excellent performance. This is likely because the utility maximizer is
+                            probably among most voters' top two or three choices, so as long as voters <i>can</i>
+                            approve at least their top few candidates, the best candidate still generally earns enough
+                            approvals to win.
+                        </li>
+                        <li>
+                            Second, it means that more complex methods like STAR and SCORE require voters to express
+                            preferences for more candidates in order to outperform Approval. If voters are likely to
+                            only fill out part of their ballot, or truncate their scores to just a few candidates, then
+                            the theoretical advantages of STAR/SCORE seen in VSE simulations with full ballots may not
+                            materialise in practice.
+                        </li>
+                    </ul>
+                    <p>
+                        Further, we can see that overall, Approval remains competitive with more complex methods with
+                        or without noise, and even outperforms them in some scenarios. This suggests that the potential
+                        gains in outcomes that more complex methods like STAR or Condorcet can provide in ideal
+                        conditions, as shown in VSE simulations, may not bear out in real-world conditions where voters
+                        are imperfect. Instead, what is likely to be gained from moving from Approval to a more complex
+                        method is more administrative complexity and cognitive load for voters. Further, the results are
+                        harder to interpret and defend from a democratic legitimacy perspective, compared to Approval
+                        where there is no secondary data to spin.
+                    </p>
+                    <p>
+                        Methods like STAR might be more suited to high-information, high-engagement elections, such as
+                        a decision by a committee of experts or a city council, where the participants have strong
+                        incentives to fill out their ballots carefully and fully. Whereas, STAR might be less suited to
+                        <i>electing a city council</i> where voters are less familiar with the candidates and less
+                        motivated to completely and thoughtfully fill out their ballots. In the latter case, the
+                        simplicity and robustness of Approval might make it a better choice, even if STAR has higher
+                        theoretical performance under perfect conditions.
+                    </p>
+                    <p>
+                        Approval voting appears to be a low-friction, robust voting method that achieves the same
+                        general quality of outcomes as more complex methods across a wide range of voter imperfection
+                        scenarios, while being low-cost to implement, easy to count, easy to explain, easy to
+                        interpret, and easy to defend from a democratic legitimacy perspective. Why overcomplicate
+                        things if the simpler method is just as good in practice?
+                    </p>
+                </div>
+            </details>
+        </section>
+
+    </main>
+
+    <footer>
+        <p>
+            Model by <a href="https://eigentaylor.github.io/" target="_blank" rel="noopener">eigentaylor</a>.
+        </p>
+        <p>
+            Code written by Anthropic's Claude and GitHub Copilot, slightly modified by me.
+        </p>
+        <p>
+            Simulation runs entirely in your browser.
+        </p>
+        <p>
+            Source on <a href="https://github.com/eigentaylor/satisficing-voter-sim" target="_blank"
+                rel="noopener">GitHub</a>.
+        </p>
+    </footer>
+
+    <script src="sim.js"></script>
+</body>
+
+</html>
