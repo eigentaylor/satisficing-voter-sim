@@ -5,6 +5,8 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>A Satisficing Voter Model</title>
+    <link rel="icon" href='data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y=".9em" font-size="90">📊</text></svg>' />
+    <!-- Other favicon options: 📊 ✅ ⚖️ 📈 🗳️-->
     <link rel="stylesheet" href="style.css" />
     <!-- Chart.js -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
@@ -31,14 +33,14 @@
         <section class="card" id="intro">
             <h2>What is this?</h2>
             <p>
-                Standard VSE simulations assume perfect voters: everyone knows their preferences and fills
+                Standard VSE simulations generally assume perfect voters: everyone knows their preferences and fills
                 out their ballot completely. Real voters face two kinds of imperfection:
             </p>
             <div class="two-col">
                 <div class="concept-box">
                     <h3>📚 Epistemic Noise &nbsp;<em>t</em></h3>
                     <p>
-                        A voter may not know their own utilities — especially for unfamiliar candidates.
+                        A voter may not know their own utilities, especially for unfamiliar candidates.
                         The knowledge parameter $t \in [0,1]$ interpolates between pure noise ($t=0$) and
                         perfect self-knowledge ($t=1$).
                     </p>
