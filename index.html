@@ -5,7 +5,8 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>A Satisficing Voter Model</title>
-    <link rel="icon" href='data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y=".9em" font-size="90">📊</text></svg>' />
+    <link rel="icon"
+        href='data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y=".9em" font-size="90">📊</text></svg>' />
     <!-- Other favicon options: 📊 ✅ ⚖️ 📈 🗳️-->
     <link rel="stylesheet" href="style.css" />
     <!-- Chart.js -->
@@ -33,7 +34,8 @@
         <section class="card" id="intro">
             <h2>What is this?</h2>
             <p>
-                Standard VSE simulations generally assume perfect voters: everyone knows their preferences and fills
+                Standard <a href="https://electionscience.github.io/vse-sim/VSEbasic" target="_blank" rel="noopener">VSE
+                    simulations</a> generally assume perfect voters: everyone knows their preferences and fills
                 out their ballot completely. Real voters face two kinds of imperfection:
             </p>
             <div class="two-col">
@@ -58,7 +60,8 @@
                 </div>
             </div>
             <p>
-                VSE (Voter Satisfaction Efficiency) measures how often a method elects the utility-maximizing
+                <a href="https://rangevoting.org/vsi.html" target="_blank" rel="noopener">VSE</a>
+                (Voter Satisfaction Efficiency) measures how often a method elects the utility-maximizing
                 candidate, normalised so 0 = random winner and 1 = always optimal.
             </p>
         </section>
@@ -141,7 +144,8 @@
             <!-- Slices -->
             <div class="tab-pane active" id="tab-slices">
                 <p class="chart-desc">
-                    Left: VSE vs knowledge $t$ when voters fill out their entire ballot ($\ell=1$).
+                    Left: <a href="https://electionscience.github.io/vse-sim/VSEbasic" target="_blank"
+                        rel="noopener">VSE</a> vs knowledge $t$ when voters fill out their entire ballot ($\ell=1$).
                     Right: VSE vs energy $\ell$ when voters have perfect knowledge ($t=1$).
                 </p>
                 <div class="chart-row stacked">
@@ -262,6 +266,8 @@
             <details>
                 <summary>VSE formula</summary>
                 <p>
+                    See the <a href="https://electionscience.github.io/vse-sim/VSEbasic" target="_blank"
+                        rel="noopener">VSE basics</a> for baseline context.
                     $$\text{VSE}_M(t,\ell) = \frac{\mathbb{E}[\text{SW}(w_M)] -
                     \mathbb{E}[\text{SW}(\text{random})]}{\mathbb{E}[\text{SW}(c^*)] -
                     \mathbb{E}[\text{SW}(\text{random})]}$$
@@ -331,7 +337,9 @@
                             express
                             preferences for more candidates in order to outperform Approval. If voters are likely to
                             only fill out part of their ballot, or truncate their scores to just a few candidates, then
-                            the theoretical advantages of STAR/SCORE seen in VSE simulations with full ballots may not
+                            the theoretical advantages of STAR/SCORE seen in <a
+                                href="https://electionscience.github.io/vse-sim/VSEbasic" target="_blank"
+                                rel="noopener">VSE simulations</a> with full ballots may not
                             materialise in practice.
                         </li>
                     </ul>

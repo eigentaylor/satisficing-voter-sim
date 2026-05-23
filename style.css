@@ -43,6 +43,30 @@ body {
     min-height: 100vh;
 }
 
+a {
+    color: #8fd9f2;
+    text-decoration-color: rgba(143, 217, 242, 0.7);
+    text-underline-offset: 2px;
+    text-decoration-thickness: 1.5px;
+    transition: color 0.15s, text-decoration-color 0.15s;
+}
+
+a:visited {
+    color: #9ecaf7;
+    text-decoration-color: rgba(158, 202, 247, 0.65);
+}
+
+a:hover {
+    color: #b6ebff;
+    text-decoration-color: #b6ebff;
+}
+
+a:focus-visible {
+    outline: 2px solid rgba(74, 184, 224, 0.55);
+    outline-offset: 2px;
+    border-radius: 3px;
+}
+
 /* ── header ── */
 header {
     text-align: center;
