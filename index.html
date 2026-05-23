@@ -287,9 +287,8 @@
                         Ranked Choice Voting (RCV) performs surprisingly poorly across the board. Its VSE improvement
                         over
                         Plurality is quite small, particularly proportional to the administrative cost it has over
-                        methods like Approval, STAR, and Condorcet. It appears to be a very poor choice for a method
-                        when something like Approval is available that is simpler, more robust, and has much better
-                        performance across the board.
+                        methods like Approval, STAR, and Condorcet. The latter three methods all significantly
+                        outperform RCV across the board, and would have a lower cost to implement.
                     </p>
                     <p>
                         Borda performs exceptionally well under honest conditions, Borda is known for
@@ -335,6 +334,23 @@
                         </li>
                     </ul>
                     <p>
+                        It should be mentioned that Approval naturally has a structural advantage in this model due to
+                        the way the considered set and approval threshold interact, which may contribute to its strong
+                        performance under low energy. However, this structural advantage is likely to be more
+                        representative of real-world conditions, where voters often are not perfectly informed and may
+                        not fill out their entire ballot. Thus, this structural advantage may actually be a point in
+                        Approval's favor in terms of practical considerations for how real voters behave, rather than an
+                        unfair quirk of the model.
+                    </p>
+                    <p>
+                        This model also does not include strategic voting, which is likely to be more of a problem for a
+                        method like Borda. However, while Approval is claimed to be vulnerable to strategic voting (ex.
+                        heavy bullet voting), based on Approval's strong performance even under low energy, it seems
+                        plausible that Approval's performance would degrade much less under strategic voting than
+                        methods like Borda; especially given Approval's competitive VSE even under heavy strategy.
+                        However, this is an open question that would require further modeling to explore.
+                    </p>
+                    <p>
                         Further, we can see that overall, Approval remains competitive with more complex methods with
                         or without noise, and even outperforms them in some scenarios.
                         This suggests that the potential
@@ -344,15 +360,6 @@
                         method is more administrative complexity and cognitive load for voters. Further, the results are
                         harder to interpret and defend from a democratic legitimacy perspective, compared to Approval
                         where there is no secondary data to spin.
-                    </p>
-                    <p>
-                        It should be mentioned that Approval naturally has a structural advantage in this model due to
-                        the way the considered set and approval threshold interact, which may contribute to its strong
-                        performance under low energy. However, this structural advantage is likely to be more
-                        representative of real-world conditions, where voters often are not perfectly informed and may
-                        not fill out their entire ballot. Thus, this structural advantage may actually be a point in
-                        Approval's favor in terms of practical considerations for how real voters behave, rather than an
-                        unfair quirk of the model.
                     </p>
                     <p>
                         Methods like STAR might be more suited to high-information, high-engagement elections, such as
@@ -367,8 +374,11 @@
                         Approval voting appears to be a low-friction, robust voting method that achieves the same
                         general quality of outcomes as more complex methods across a wide range of voter imperfection
                         scenarios, while being low-cost to implement, easy to count, easy to explain, easy to
-                        interpret, and easy to defend from a democratic legitimacy perspective. Why overcomplicate
-                        things if the simpler method is just as good in practice?
+                        interpret, and easy to defend from a democratic legitimacy perspective.
+                    </p>
+                    <p>
+                        See my <a href="https://eigentaylor.github.io/blog/approval-only/" target="_blank"
+                            rel="noopener">broader case for Approval voting</a> for more details.
                     </p>
                 </div>
             </details>
