@@ -74,7 +74,7 @@ When all utilities in the considered set are equal (including when $K=1$), every
 
 **Approval.** Voter $i$ approves candidates in $\mathcal{S}_i$ whose perceived utility exceeds their *global personal mean*:
 
-$$A_i = \{c \in \mathcal{S}_i : \tilde{u}_i(c) > \bar{\tilde{u}}_i\}, \quad \bar{\tilde{u}}_i = \frac{1}{m}\sum_{c'} \tilde{u}_i(c')$$
+$$A_i = \\{c \in \mathcal{S}_i : \tilde{u}_i(c) > \bar{\tilde{u}}_i\\}, \quad \bar{\tilde{u}}_i = \frac{1}{m}\sum_{c'} \tilde{u}_i(c')$$
 
 Note the threshold $\bar{\tilde{u}}_i$ is computed over *all* $m$ candidates, not just the considered set. This is essential: the threshold is a stable feature of the voter's perceived preference landscape, not a moving target that changes with energy level. If $A_i = \emptyset$, the voter approves their single top-ranked candidate (a minimal fallback equivalent to plurality).
 
