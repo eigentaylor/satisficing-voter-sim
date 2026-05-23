@@ -449,14 +449,14 @@ def plot_weighted(res, tv, lv, path='out_weighted.png'):
 
     # Prior 1: uniform
     p1 = np.ones_like(T)
-    # Prior 2: high t, low l  (informed but lazy)
+    # Prior 2: high t, low l  (informed but easily exhausted)
     p2 = np.exp(3*T - 3*(1-L))
     # Prior 3: low t, high l  (energetic but uninformed)
     p3 = np.exp(-3*T + 3*L)
 
     priors = [
         ('Uniform prior', p1),
-        ('Informed & lazy\n(high t, low ℓ)', p2),
+        ('Informed & exhausted\n(high t, low ℓ)', p2),
         ('Uninformed & energetic\n(low t, high ℓ)', p3),
     ]
 

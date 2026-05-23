@@ -815,9 +815,9 @@ function plotWeighted(res, tVals, lVals, methods) {
 
     const priors = [
         { id: 'chart-w-1', label: 'Uniform prior', fn: () => 1 },
-        { id: 'chart-w-2', label: 'Informed & lazy\n(high t, low ℓ)', fn: (t, l) => Math.exp(3 * t - 3 * (1 - l)) },
+        { id: 'chart-w-2', label: 'Informed & exhausted\n(high t, low ℓ)', fn: (t, l) => Math.exp(3 * t - 3 * (1 - l)) },
         { id: 'chart-w-3', label: 'Energetic & uninformed\n(low t, high ℓ)', fn: (t, l) => Math.exp(-3 * t + 3 * l) },
-        { id: 'chart-w-4', label: 'Uninformed & lazy\n(low t, low ℓ)', fn: (t, l) => Math.exp(-3 * t + 3 * (1 - l)) },
+        { id: 'chart-w-4', label: 'Uninformed & exhausted\n(low t, low ℓ)', fn: (t, l) => Math.exp(-3 * t + 3 * (1 - l)) },
     ];
 
     for (const p of priors) {
