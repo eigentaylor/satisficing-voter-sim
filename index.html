@@ -79,12 +79,12 @@
                     <input type="range" id="nc" min="3" max="12" step="1" value="8" />
                 </div>
                 <div class="control-group">
-                    <label>Trials per grid point <span id="ntr-val" class="val-badge">150</span></label>
-                    <input type="range" id="ntr" min="50" max="500" step="50" value="150" />
+                    <label>Trials per grid point <span id="ntr-val" class="val-badge">200</span></label>
+                    <input type="range" id="ntr" min="50" max="500" step="50" value="200" />
                 </div>
                 <div class="control-group">
-                    <label>Grid resolution <span id="ng-val" class="val-badge">10</span></label>
-                    <input type="range" id="ng" min="6" max="16" step="2" value="10" />
+                    <label>Grid resolution <span id="ng-val" class="val-badge">8</span></label>
+                    <input type="range" id="ng" min="6" max="16" step="2" value="8" />
                 </div>
                 <div class="control-group">
                     <label>Spatial dimensions <span id="nd-val" class="val-badge">2</span></label>
@@ -244,15 +244,25 @@
                 <div class="note-box">
                     <p><strong>How to read this (plain language):</strong></p>
                     <ul>
-                        <li><strong>Hypothesis X &gt; Y</strong> means: "is there evidence that method X is better than method Y?"</li>
-                        <li><strong>In the matrix</strong>, each row-vs-column cell asks whether the <strong>row</strong> method is better than the <strong>column</strong> method.</li>
-                        <li><strong>Green</strong> means evidence supports the row method being better, <strong>yellow</strong> means mixed or weak evidence, and <strong>red</strong> means no clear evidence.</li>
-                        <li><strong>Pooled p-values</strong> summarize the whole simulation in one number per hypothesis.</li>
-                        <li><strong>Per-grid nominal sig</strong> counts cells significant before multiple-testing correction.</li>
-                        <li><strong>Per-grid Bonf sig</strong> is stricter and controls false positives across all pair-cell tests.</li>
-                        <li><strong>Practical rule:</strong> trust Bonferroni-adjusted counts more than nominal counts for cell-level claims.</li>
-                        <li><strong>Important:</strong> a small p-value is evidence, not proof, and does not by itself measure effect size.</li>
-                        <li><strong>Method note:</strong> mean-difference p-values use a normal approximation in-browser; the sign test is an exact binomial sensitivity check.</li>
+                        <li><strong>Hypothesis X &gt; Y</strong> means: "is there evidence that method X is better than
+                            method Y?"</li>
+                        <li><strong>In the matrix</strong>, each row-vs-column cell asks whether the
+                            <strong>row</strong> method is better than the <strong>column</strong> method.</li>
+                        <li><strong>Green</strong> means evidence supports the row method being better,
+                            <strong>yellow</strong> means mixed or weak evidence, and <strong>red</strong> means no
+                            clear evidence.</li>
+                        <li><strong>Pooled p-values</strong> summarize the whole simulation in one number per
+                            hypothesis.</li>
+                        <li><strong>Per-grid nominal sig</strong> counts cells significant before multiple-testing
+                            correction.</li>
+                        <li><strong>Per-grid Bonf sig</strong> is stricter and controls false positives across all
+                            pair-cell tests.</li>
+                        <li><strong>Practical rule:</strong> trust Bonferroni-adjusted counts more than nominal counts
+                            for cell-level claims.</li>
+                        <li><strong>Important:</strong> a small p-value is evidence, not proof, and does not by itself
+                            measure effect size.</li>
+                        <li><strong>Method note:</strong> mean-difference p-values use a normal approximation
+                            in-browser; the sign test is an exact binomial sensitivity check.</li>
                     </ul>
                 </div>
                 <p id="hypothesis-empty" class="chart-desc" style="display:none"></p>

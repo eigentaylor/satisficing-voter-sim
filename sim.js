@@ -265,7 +265,7 @@ let isSimRunning = false;
 let lastSimResult = null;
 
 const HYPOTHESIS_ALPHA = 0.01;
-let hypothesisTableSort = { key: 'label', dir: 'asc' };
+let hypothesisTableSort = { key: 'pooledMeanP', dir: 'asc' };
 
 function orderedEnabledMethods(methods) {
     return Object.keys(METHOD_COLORS).filter(name => methods[name]);
@@ -613,6 +613,12 @@ function renderHypothesisTests(state) {
     `;
 
     matrixWrap.innerHTML = `
+        <div class="hypothesis-color-legend" aria-label="Pairwise evidence color legend">
+            <span class="legend-title">Matrix Colors:</span>
+            <span class="legend-item"><span class="legend-swatch yes"></span>Green = Evidence supports row &gt; column</span>
+            <span class="legend-item"><span class="legend-swatch mixed"></span>Yellow = Mixed or weak evidence</span>
+            <span class="legend-item"><span class="legend-swatch no"></span>Red = No clear evidence</span>
+        </div>
         <div class="matrix-scroll">
             <table class="pairwise-matrix">
                 <thead>

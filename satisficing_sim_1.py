@@ -28,10 +28,10 @@ rng = np.random.default_rng(42)
 # ── params ────────────────────────────────────────────────────────────────────
 N_VOTERS = 120
 N_CANDS  = 8          # N candidates → K ∈ {1,2,..,N} for l in 10 steps
-N_TRIALS = 150
+N_TRIALS = 200
 N_DIM    = 2
 
-N_T = 10
+N_T = 8
 N_L = N_T
 T_VALS = np.linspace(0.0, 1.0, N_T)
 L_VALS = np.linspace(1/N_CANDS, 1.0, N_L)   # min = consider 1 candidate

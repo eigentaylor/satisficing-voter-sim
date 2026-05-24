@@ -614,6 +614,50 @@ input[type="range"]::-webkit-slider-thumb:hover {
     color: #bcc7d6;
 }
 
+.hypothesis-color-legend {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.55rem 0.85rem;
+    margin: 0 0 0.6rem;
+    padding: 0.5rem 0.6rem;
+    background: var(--panel2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--muted);
+    font-size: 0.8rem;
+}
+
+.hypothesis-color-legend .legend-title {
+    color: var(--text);
+    font-weight: 600;
+}
+
+.hypothesis-color-legend .legend-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+}
+
+.hypothesis-color-legend .legend-swatch {
+    width: 0.85rem;
+    height: 0.85rem;
+    border-radius: 3px;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.hypothesis-color-legend .legend-swatch.yes {
+    background: #7fe39a;
+}
+
+.hypothesis-color-legend .legend-swatch.mixed {
+    background: #e5c96e;
+}
+
+.hypothesis-color-legend .legend-swatch.no {
+    background: #e08787;
+}
+
 .hypothesis-detail {
     margin-bottom: 0.85rem;
     background: var(--panel2);
