@@ -26,9 +26,9 @@ warnings.filterwarnings('ignore')
 rng = np.random.default_rng(42)
 
 # ── params ────────────────────────────────────────────────────────────────────
-N_VOTERS = 120
+N_VOTERS = 99
 N_CANDS  = 8          # N candidates → K ∈ {1,2,..,N} for l in 10 steps
-N_TRIALS = 200
+N_TRIALS = 100
 N_DIM    = 2
 
 N_T = 8
@@ -37,6 +37,9 @@ T_VALS = np.linspace(0.0, 1.0, N_T)
 L_VALS = np.linspace(1/N_CANDS, 1.0, N_L)   # min = consider 1 candidate
 OUTPUT_DIR = 'output/plots'
 LOG_DIR = 'output/logs'
+
+USE_STRATEGY = True
+STRATEGY_SHARE = 1.0
 
 RUN_PAIRED_HYPOTHESIS_TESTS = True
 HYPOTHESIS_ALPHA = 0.01
@@ -241,6 +244,39 @@ def top_idx(u, l):
     K = K_of(l, u.shape[1])
     return np.argsort(-u, axis=1)[:, :K], K
 
+
+def _front_and_target(polls, use_third=False):
+    order = np.argsort(-polls)
+    front = int(order[0])
+    if len(order) == 1:
+        return front, front
+    if use_third and len(order) >= 3:
+        return front, int(order[2])
+    return front, int(order[1])
+
+
+def _topk_mask(pu, l):
+    nv, nc = pu.shape
+    tidx, K = top_idx(pu, l)
+    cons = np.zeros((nv, nc), dtype=bool)
+    np.put_along_axis(cons, tidx, True, axis=1)
+    return tidx, K, cons
+
+
+def _strat_voter_mask(nv, share):
+    return rng.random(nv) < float(np.clip(share, 0.0, 1.0))
+
+
+def _score_row_from_front_target(row, front, target, top_rank=5):
+    pref = target if row[target] > row[front] else front
+    other = front if pref == target else target
+    hi = row[pref]
+    lo = row[other]
+    if abs(hi - lo) < 1e-12:
+        return np.where(row >= hi, float(top_rank), 0.0)
+    scaled = (top_rank + 0.99) * (row - lo) / (hi - lo)
+    return np.clip(np.floor(scaled), 0, top_rank)
+
 def vse(sw_w, sw_rand, sw_opt):
     d = sw_opt - sw_rand
     return (sw_w - sw_rand) / d if d > 1e-9 else 1.0
@@ -375,6 +411,284 @@ def build_methods():
     }
 
 METHODS = build_methods()
+
+
+def _irv_winner_from_ballots(ballots, nc):
+    remaining = np.ones(nc, dtype=bool)
+    for _ in range(nc - 1):
+        r_idx = np.where(remaining)[0]
+        if len(r_idx) == 1:
+            break
+
+        in_rem = remaining[ballots]
+        first = np.argmax(in_rem, axis=1)
+        has = in_rem.any(axis=1)
+
+        fp = np.zeros(nc)
+        if has.any():
+            np.add.at(fp, ballots[has, first[has]], 1)
+
+        total = fp.sum()
+        if fp.max() > total / 2:
+            return int(np.argmax(fp))
+
+        fp_rem = np.where(remaining, fp, np.inf)
+        elim = int(np.argmin(fp_rem))
+        remaining[elim] = False
+
+    return int(np.where(remaining)[0][0])
+
+
+def _condorcet_winner_from_rank_mat(rm):
+    ra = rm[:, :, None]
+    rb = rm[:, None, :]
+    pw = (ra < rb).sum(axis=0)
+    margins = pw.T - pw
+    np.fill_diagonal(margins, 0)
+    worst_defeat = np.maximum(margins, 0).max(axis=1)
+    return int(np.argmin(worst_defeat)), pw
+
+
+def _plurality_winner(pu, l, use_strategy=False, strategy_share=1.0):
+    del l
+    nv, nc = pu.shape
+    top1 = np.argmax(pu, axis=1)
+    polls = np.bincount(top1, minlength=nc).astype(float)
+    if not use_strategy:
+        return int(np.argmax(polls)), polls
+
+    front, target = _front_and_target(polls)
+    strat_mask = _strat_voter_mask(nv, strategy_share)
+    top1_strat = top1.copy()
+    if strat_mask.any():
+        choose_target = pu[strat_mask, target] > pu[strat_mask, front]
+        top1_strat[strat_mask] = np.where(choose_target, target, front)
+    counts = np.bincount(top1_strat, minlength=nc).astype(float)
+    return int(np.argmax(counts)), polls
+
+
+def _approval_winner(pu, l, use_strategy=False, strategy_share=1.0):
+    nv, nc = pu.shape
+    tidx, _, cons = _topk_mask(pu, l)
+    thresh = pu.mean(axis=1, keepdims=True)
+    appr = cons & (pu > thresh)
+    empty = ~appr.any(axis=1)
+    appr[empty, tidx[empty, 0]] = True
+    polls = appr.sum(axis=0).astype(float)
+    if not use_strategy:
+        return int(np.argmax(polls)), polls
+
+    front, target = _front_and_target(polls)
+    strat_mask = _strat_voter_mask(nv, strategy_share)
+    if strat_mask.any():
+        strat_rows = np.where(strat_mask)[0]
+        pivot = ((pu[:, front] + pu[:, target]) / 2.0)[:, None]
+        strat_appr = cons & (pu >= pivot)
+        prefers_target = pu[:, target] > pu[:, front]
+
+        target_rows = strat_rows[prefers_target[strat_rows]]
+        front_rows = strat_rows[~prefers_target[strat_rows]]
+
+        if target_rows.size > 0:
+            strat_appr[target_rows, front] = False
+            strat_appr[target_rows, target] = cons[target_rows, target]
+        if front_rows.size > 0:
+            strat_appr[front_rows, target] = False
+            strat_appr[front_rows, front] = cons[front_rows, front]
+
+        appr[strat_rows] = strat_appr[strat_rows]
+        empty = ~appr.any(axis=1)
+        appr[empty, tidx[empty, 0]] = True
+
+    return int(np.argmax(appr.sum(axis=0))), polls
+
+
+def _borda_winner(pu, l, use_strategy=False, strategy_share=1.0):
+    nv, nc = pu.shape
+    tidx, K = top_idx(pu, l)
+    pts = np.arange(K, 0, -1, dtype=float)
+
+    honest_scores = np.zeros(nc)
+    for rank in range(K):
+        np.add.at(honest_scores, tidx[:, rank], pts[rank])
+    polls = honest_scores.copy()
+    if not use_strategy:
+        return int(np.argmax(honest_scores)), polls
+
+    front, target = _front_and_target(polls)
+    strat_mask = _strat_voter_mask(nv, strategy_share)
+    scores = np.zeros(nc)
+    poll_order_desc = list(np.argsort(-polls))
+
+    for i in range(nv):
+        considered = list(tidx[i])
+        if (not strat_mask[i]) or K <= 1:
+            order = considered
+        else:
+            order = considered.copy()
+            if front in order and target in order:
+                middle = [c for c in poll_order_desc if c in order and c not in (front, target)][::-1]
+                if pu[i, target] > pu[i, front]:
+                    order = [target] + middle + [front]
+                else:
+                    order = [front] + middle + [target]
+        for rank, cand in enumerate(order):
+            scores[cand] += pts[rank]
+
+    return int(np.argmax(scores)), polls
+
+
+def _score_ballots(pu, l):
+    nv, nc = pu.shape
+    tidx, _ = top_idx(pu, l)
+
+    lo = pu.min(axis=1, keepdims=True)
+    hi = pu.max(axis=1, keepdims=True)
+    denom = hi - lo
+    flat = (denom < 1e-9).squeeze(axis=1)
+    denom[denom < 1e-9] = 1.0
+    scaled = 5 * (pu - lo) / denom
+    scaled[flat] = 5.0
+
+    ballots = np.zeros((nv, nc))
+    np.put_along_axis(ballots, tidx, np.take_along_axis(scaled, tidx, axis=1), axis=1)
+    return ballots
+
+
+def _score_winner(pu, l, use_strategy=False, strategy_share=1.0):
+    nv, _ = pu.shape
+    ballots = _score_ballots(pu, l)
+    polls = ballots.sum(axis=0)
+    if not use_strategy:
+        return int(np.argmax(polls)), polls, ballots
+
+    front, target = _front_and_target(polls)
+    tidx, _, cons = _topk_mask(pu, l)
+    strat_mask = _strat_voter_mask(nv, strategy_share)
+    if strat_mask.any():
+        for i in np.where(strat_mask)[0]:
+            row = _score_row_from_front_target(pu[i], front, target, top_rank=5)
+            row = np.where(cons[i], row, 0.0)
+            if not np.any(row > 0):
+                row[tidx[i, 0]] = 5.0
+            ballots[i] = row
+    return int(np.argmax(ballots.sum(axis=0))), polls, ballots
+
+
+def _star_winner(pu, l, use_strategy=False, strategy_share=1.0):
+    _, polls, ballots = _score_winner(pu, l, use_strategy=use_strategy, strategy_share=strategy_share)
+    totals = ballots.sum(axis=0)
+    f1, f2 = np.argsort(-totals)[:2]
+    winner = int(f1 if (ballots[:, f1] > ballots[:, f2]).sum() >= (ballots[:, f2] > ballots[:, f1]).sum() else f2)
+    return winner, polls
+
+
+def _irv_winner(pu, l, use_strategy=False, strategy_share=1.0):
+    nv, nc = pu.shape
+    tidx, K = top_idx(pu, l)
+    ballots = np.argsort(-pu, axis=1)[:, :K]
+    polls = np.bincount(ballots[:, 0], minlength=nc).astype(float)
+    if not use_strategy:
+        return _irv_winner_from_ballots(ballots, nc), polls
+
+    front, target = _front_and_target(polls)
+    poll_order_desc = list(np.argsort(-polls))
+    strat_mask = _strat_voter_mask(nv, strategy_share)
+    for i in np.where(strat_mask)[0]:
+        order = list(ballots[i])
+        winner_q = pu[i, front]
+        targ_q = pu[i, target]
+
+        by_poll_loser_to_winner = [
+            c for c in poll_order_desc[::-1]
+            if c in order and c != front
+        ]
+
+        strat_order = []
+        if target in order and targ_q > winner_q:
+            strat_order.append(target)
+            by_poll_loser_to_winner = [c for c in by_poll_loser_to_winner if c != target]
+
+        for c in by_poll_loser_to_winner:
+            if pu[i, c] > winner_q:
+                strat_order.append(c)
+
+        if front in order:
+            strat_order.append(front)
+
+        for c in by_poll_loser_to_winner:
+            if pu[i, c] <= winner_q:
+                strat_order.append(c)
+
+        missing = [c for c in order if c not in strat_order]
+        if missing:
+            strat_order.extend(sorted(missing, key=lambda c: pu[i, c], reverse=True))
+
+        order = strat_order[:K]
+        ballots[i] = np.array(order, dtype=ballots.dtype)
+
+    return _irv_winner_from_ballots(ballots, nc), polls
+
+
+def _condorcet_winner(pu, l, use_strategy=False, strategy_share=1.0):
+    nv, nc = pu.shape
+    tidx, K = top_idx(pu, l)
+    rm, _ = _rank_mat(pu, l)
+    honest_winner, pw = _condorcet_winner_from_rank_mat(rm)
+    polls = (pw > pw.T).sum(axis=1).astype(float)
+    if not use_strategy:
+        return honest_winner, polls
+
+    front, target = _front_and_target(polls)
+    strat_mask = _strat_voter_mask(nv, strategy_share)
+    poll_order = list(np.argsort(-polls))
+
+    for i in np.where(strat_mask)[0]:
+        order = list(tidx[i])
+        if pu[i, target] > pu[i, front] and front in order and target in order:
+            others = [c for c in poll_order if c in order and c not in (front, target)]
+            not_too_bad = min(pu[i, front], pu[i, target])
+            decent = [c for c in others if pu[i, c] >= not_too_bad]
+            bad = [c for c in others if pu[i, c] < not_too_bad]
+
+            decent = sorted(decent, key=lambda c: pu[i, c], reverse=True)
+            bad = sorted(bad, key=lambda c: pu[i, c], reverse=True)
+            order = decent + [target] + bad + [front]
+        else:
+            others = [c for c in poll_order if c in order and c != front]
+            order = [front] + sorted(others, key=lambda c: pu[i, c], reverse=True)
+
+        rm[i] = K
+        for k, cand in enumerate(order):
+            rm[i, cand] = k
+
+    winner, _ = _condorcet_winner_from_rank_mat(rm)
+    return winner, polls
+
+
+def _method_winner(name, pu, l, use_strategy=False, strategy_share=1.0):
+    if name == 'Plurality':
+        winner, _ = _plurality_winner(pu, l, use_strategy=use_strategy, strategy_share=strategy_share)
+        return winner
+    if name == 'Approval':
+        winner, _ = _approval_winner(pu, l, use_strategy=use_strategy, strategy_share=strategy_share)
+        return winner
+    if name == 'Borda':
+        winner, _ = _borda_winner(pu, l, use_strategy=use_strategy, strategy_share=strategy_share)
+        return winner
+    if name == 'Score':
+        winner, _, _ = _score_winner(pu, l, use_strategy=use_strategy, strategy_share=strategy_share)
+        return winner
+    if name == 'STAR':
+        winner, _ = _star_winner(pu, l, use_strategy=use_strategy, strategy_share=strategy_share)
+        return winner
+    if name == 'RCV':
+        winner, _ = _irv_winner(pu, l, use_strategy=use_strategy, strategy_share=strategy_share)
+        return winner
+    if name == 'Condorcet':
+        winner, _ = _condorcet_winner(pu, l, use_strategy=use_strategy, strategy_share=strategy_share)
+        return winner
+    raise KeyError(f'Unknown method: {name}')
 
 
 def _one_sided_ttest_greater(deltas):
@@ -621,7 +935,7 @@ def report_pairwise_hypotheses(test_res):
 # ── simulation grid ───────────────────────────────────────────────────────────
 
 def run_grid(t_vals, l_vals, nv=N_VOTERS, nc=N_CANDS, ntr=N_TRIALS,
-             return_trial_vse=False):
+             return_trial_vse=False, use_strategy=USE_STRATEGY, strategy_share=STRATEGY_SHARE):
     nt, nl = len(t_vals), len(l_vals)
     res = {m: np.zeros((nl, nt)) for m in METHODS}
     trial_vse = None
@@ -641,7 +955,10 @@ def run_grid(t_vals, l_vals, nv=N_VOTERS, nc=N_CANDS, ntr=N_TRIALS,
                 sw_r = u.mean()
                 sw_o = u.mean(axis=0).max()
                 for name, fn in METHODS.items():
-                    w = fn(pu, l)
+                    if use_strategy:
+                        w = _method_winner(name, pu, l, use_strategy=True, strategy_share=strategy_share)
+                    else:
+                        w = fn(pu, l)
                     vse_val = vse(u[:, w].mean(), sw_r, sw_o)
                     acc[name] += vse_val
                     if trial_vse is not None:
@@ -701,8 +1018,8 @@ def _detect_tier_mins(values, alpha=0.5):
 
 def _tier_star_counts(values, alpha=0.5, max_stars=3):
     """Return stars per value using same tier logic as chart annotation."""
-    tier_mins = _detect_tier_mins(values, alpha)
-    positive_tier_mins = [tier_min for tier_min in tier_mins if tier_min > 0]
+    positive_values = [v for v in values if np.isfinite(v) and v > 0]
+    positive_tier_mins = _detect_tier_mins(positive_values, alpha)
     out = []
     for v in values:
         if not np.isfinite(v) or v <= 0:
@@ -790,6 +1107,24 @@ def _label_bars(ax, bars, values, pad=0.008, fmt='{:.3f}', positive_va='bottom',
             va = negative_va
         ax.text(x, y, fmt.format(v), ha='center', va=va, color=TEXT_C, fontsize=7.5)
 
+
+def _plot_nonnegative_or_mark_negative(ax, labels, values, colors, width=0.65,
+                                       edgecolor=GRID_C, linewidth=0.5,
+                                       neg_text_fmt='NEGATIVE\n{:.2f}'):
+    x = np.arange(len(labels))
+    bars = []
+    for xi, v, c in zip(x, values, colors):
+        if v >= 0:
+            bar = ax.bar(xi, v, color=c, width=width, edgecolor=edgecolor, linewidth=linewidth)[0]
+            ax.text(xi, v + 0.012, f'{v:.2f}', ha='center', va='bottom', color=TEXT_C, fontsize=7.5)
+        else:
+            bar = ax.bar(xi, 0.0, color='none', width=width, edgecolor='none', linewidth=0.0)[0]
+            ax.text(xi, 0.035, neg_text_fmt.format(v), ha='center', va='bottom', color=TEXT_C, fontsize=7.0)
+        bars.append(bar)
+    ax.set_xticks(x)
+    ax.set_xticklabels(labels, rotation=35, ha='right', fontsize=8)
+    return bars
+
 def _plot_delta_heatmaps(res, tv, lv, base_method, compared_methods, title, path):
     n = len(compared_methods)
     extent = [tv[0], tv[-1], lv[0], lv[-1]]
@@ -820,7 +1155,7 @@ def _plot_delta_heatmaps(res, tv, lv, base_method, compared_methods, title, path
 
 # ── plot 1: axis slices ───────────────────────────────────────────────────────
 
-def plot_slices(res, tv, lv, path='out_slices.png'):
+def plot_slices(res, tv, lv, path='strat_slices.png'):
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 5.5), facecolor=BG)
     for ax in (ax1, ax2):
         _style_ax(ax)
@@ -851,7 +1186,7 @@ def plot_slices(res, tv, lv, path='out_slices.png'):
 
 # ── plot 2: heatmaps ──────────────────────────────────────────────────────────
 
-def plot_heatmaps(res, tv, lv, path='out_heatmaps.png'):
+def plot_heatmaps(res, tv, lv, path='strat_heatmaps.png'):
     import math
     n_methods = len(METHODS)
     n_cols    = 3
@@ -881,7 +1216,7 @@ def plot_heatmaps(res, tv, lv, path='out_heatmaps.png'):
 
 # ── plot 3: robustness curves ─────────────────────────────────────────────────
 
-def plot_robustness(res, tv, lv, path='out_robustness.png'):
+def plot_robustness(res, tv, lv, path='strat_robustness.png'):
     tau_range   = np.linspace(0.4, 1.0, 80)
     dt  = tv[1] - tv[0]
     dl  = lv[1] - lv[0]
@@ -911,7 +1246,7 @@ def plot_robustness(res, tv, lv, path='out_robustness.png'):
 
 # ── plot 4: scenario bar charts ───────────────────────────────────────────────
 
-def plot_scenarios(res, tv, lv, path='out_scenarios.png'):
+def plot_scenarios(res, tv, lv, path='strat_scenarios.png'):
     scenarios = _scenario_points(tv, lv)
 
     fig, axes = plt.subplots(2, 2, figsize=(12, 10), sharey=True, facecolor=BG)
@@ -920,14 +1255,10 @@ def plot_scenarios(res, tv, lv, path='out_scenarios.png'):
     for ax, (label, ti, li) in zip(axes, scenarios):
         _style_ax(ax)
         vals   = [res[m][li, ti] for m in METHODS]
+        labels = list(METHODS.keys())
         clrs   = [COLORS[m] for m in METHODS]
-        bars   = ax.bar(list(METHODS.keys()), vals, color=clrs, width=0.65,
-                        edgecolor=GRID_C, linewidth=0.5)
+        bars = _plot_nonnegative_or_mark_negative(ax, labels, vals, clrs)
         ax.set_title(label, fontsize=9)
-        ax.set_xticklabels(list(METHODS.keys()), rotation=35, ha='right', fontsize=8)
-        for bar, v in zip(bars, vals):
-            ax.text(bar.get_x() + bar.get_width()/2, v + 0.012,
-                    f'{v:.2f}', ha='center', va='bottom', color=TEXT_C, fontsize=7.5)
         ax.set_ylim(0, 1.24)
         _annotate_stars(ax, bars, vals, label_gap=0.06)
 
@@ -1003,7 +1334,7 @@ def _plot_scenario_improvement_against(res, tv, lv, base_method, target_methods,
     print(f'  ✓  {path}')
 
 def plot_scenario_plurality_improvement(res, tv, lv,
-                                        path='out_scenario_plurality_improvement.png'):
+                                        path='strat_scenario_plurality_improvement.png'):
     _plot_scenario_improvement_against(
         res, tv, lv,
         base_method='Plurality',
@@ -1012,7 +1343,7 @@ def plot_scenario_plurality_improvement(res, tv, lv,
     )
 
 def plot_scenario_approval_improvement(res, tv, lv,
-                                       path='out_scenario_approval_improvement.png'):
+                                       path='strat_scenario_approval_improvement.png'):
     _plot_scenario_improvement_against(
         res, tv, lv,
         base_method='Approval',
@@ -1021,7 +1352,7 @@ def plot_scenario_approval_improvement(res, tv, lv,
     )
 
 def plot_scenario_overall_improvement(res, tv, lv,
-                                      path='out_scenario_overall_improvement.png'):
+                                      path='strat_scenario_overall_improvement.png'):
     """Grouped comparison of scenario improvement vs Plurality and Approval."""
     scenarios = _scenario_points(tv, lv)
     scenario_scores = _scenario_method_scores(res, scenarios)
@@ -1111,7 +1442,7 @@ def plot_scenario_overall_improvement(res, tv, lv,
 
 # ── plot 5: approval difference maps ─────────────────────────────────────────
 
-def plot_approval_diff(res, tv, lv, path='out_approval_diff.png'):
+def plot_approval_diff(res, tv, lv, path='strat_approval_diff.png'):
     others  = [m for m in METHODS if m != 'Approval']
     n       = len(others)
     extent  = [tv[0], tv[-1], lv[0], lv[-1]]
@@ -1141,7 +1472,7 @@ def plot_approval_diff(res, tv, lv, path='out_approval_diff.png'):
 
 # ── plot 6: weighted avg VSE under different priors ───────────────────────────
 
-def plot_weighted(res, tv, lv, path='out_weighted.png'):
+def plot_weighted(res, tv, lv, path='strat_weighted.png'):
     """Weighted average VSE under four priors over (t, l) space."""
     priors = _weighted_priors(tv, lv)
 
@@ -1151,13 +1482,10 @@ def plot_weighted(res, tv, lv, path='out_weighted.png'):
         _style_ax(ax)
         avgs = _weighted_method_scores(res, w)
         vals  = [avgs[m] for m in METHODS]
+        labels = list(METHODS.keys())
         clrs  = [COLORS[m] for m in METHODS]
-        bars  = ax.bar(list(METHODS.keys()), vals, color=clrs, width=0.65,
-                       edgecolor=GRID_C, linewidth=0.5)
+        bars = _plot_nonnegative_or_mark_negative(ax, labels, vals, clrs)
         ax.set_title(label, fontsize=9)
-        ax.set_xticklabels(list(METHODS.keys()), rotation=35, ha='right', fontsize=8)
-        label_pad = 0.01
-        _label_bars(ax, bars, vals, pad=label_pad)
         ax.set_ylim(0, 1.18)
         _annotate_stars(ax, bars, vals, label_gap=0.075)
 
@@ -1231,7 +1559,7 @@ def _plot_weighted_improvement_against(res, tv, lv, base_method, target_methods,
     print(f'  ✓  {path}')
 
 def plot_weighted_plurality_improvement(res, tv, lv,
-                                        path='out_weighted_plurality_improvement.png'):
+                                        path='strat_weighted_plurality_improvement.png'):
     _plot_weighted_improvement_against(
         res, tv, lv,
         base_method='Plurality',
@@ -1240,7 +1568,7 @@ def plot_weighted_plurality_improvement(res, tv, lv,
     )
 
 def plot_weighted_approval_improvement(res, tv, lv,
-                                       path='out_weighted_approval_improvement.png'):
+                                       path='strat_weighted_approval_improvement.png'):
     _plot_weighted_improvement_against(
         res, tv, lv,
         base_method='Approval',
@@ -1249,7 +1577,7 @@ def plot_weighted_approval_improvement(res, tv, lv,
     )
 
 def plot_weighted_overall_improvement(res, tv, lv,
-                                      path='out_weighted_overall_improvement.png'):
+                                      path='strat_weighted_overall_improvement.png'):
     """Grouped comparison of weighted improvement vs Plurality and Approval."""
     priors = _weighted_priors(tv, lv)
     target_methods = [m for m in METHODS if m not in ('Plurality', 'Approval')]
@@ -1337,7 +1665,7 @@ def plot_weighted_overall_improvement(res, tv, lv,
 
 # ── plot 8: reform delta heatmaps ─────────────────────────────────────────────
 
-def plot_plurality_delta_heatmap(res, tv, lv, path='out_plurality_delta_heatmap.png'):
+def plot_plurality_delta_heatmap(res, tv, lv, path='strat_plurality_delta_heatmap.png'):
     others = [m for m in METHODS if m != 'Plurality']
     _plot_delta_heatmaps(
         res, tv, lv,
@@ -1347,7 +1675,7 @@ def plot_plurality_delta_heatmap(res, tv, lv, path='out_plurality_delta_heatmap.
         path=path,
     )
 
-def plot_approval_delta_heatmap(res, tv, lv, path='out_approval_delta_heatmap.png'):
+def plot_approval_delta_heatmap(res, tv, lv, path='strat_approval_delta_heatmap.png'):
     others = [m for m in METHODS if m not in ('Plurality', 'Approval')]
     _plot_delta_heatmaps(
         res, tv, lv,
@@ -1375,12 +1703,15 @@ if __name__ == '__main__':
     _summary('Satisficing Voter Simulation Summary')
     _summary(f'run_started={datetime.now().isoformat(timespec="seconds")}')
     _summary(f'grid={N_T}x{N_L} | trials={N_TRIALS} | voters={N_VOTERS} | candidates={N_CANDS}')
+    _summary(f'strategy_mode={int(USE_STRATEGY)} | strategy_share={STRATEGY_SHARE:.2f} | polling=per_method_honest | condorcet_target=second')
     _summary('')
     t0 = time.time()
     res, trial_vse = run_grid(
         T_VALS,
         L_VALS,
         return_trial_vse=RUN_PAIRED_HYPOTHESIS_TESTS,
+        use_strategy=USE_STRATEGY,
+        strategy_share=STRATEGY_SHARE,
     )
     sim_elapsed = time.time() - t0
 
@@ -1402,38 +1733,38 @@ if __name__ == '__main__':
     print(f'Simulation done in {sim_elapsed:.1f}s\nGenerating plots...')
 
     plot_t0 = time.time()
-    plot_slices(res, T_VALS, L_VALS, path=os.path.join(OUTPUT_DIR, 'out_slices.png'))
-    plot_heatmaps(res, T_VALS, L_VALS, path=os.path.join(OUTPUT_DIR, 'out_heatmaps.png'))
-    plot_robustness(res, T_VALS, L_VALS, path=os.path.join(OUTPUT_DIR, 'out_robustness.png'))
-    plot_scenarios(res, T_VALS, L_VALS, path=os.path.join(OUTPUT_DIR, 'out_scenarios.png'))
+    plot_slices(res, T_VALS, L_VALS, path=os.path.join(OUTPUT_DIR, 'strat_slices.png'))
+    plot_heatmaps(res, T_VALS, L_VALS, path=os.path.join(OUTPUT_DIR, 'strat_heatmaps.png'))
+    plot_robustness(res, T_VALS, L_VALS, path=os.path.join(OUTPUT_DIR, 'strat_robustness.png'))
+    plot_scenarios(res, T_VALS, L_VALS, path=os.path.join(OUTPUT_DIR, 'strat_scenarios.png'))
     # plot_scenario_plurality_improvement(
     #     res, T_VALS, L_VALS,
-    #     path=os.path.join(OUTPUT_DIR, 'out_scenario_plurality_improvement.png')
+    #     path=os.path.join(OUTPUT_DIR, 'strat_scenario_plurality_improvement.png')
     # )
     # plot_scenario_approval_improvement(
     #     res, T_VALS, L_VALS,
-    #     path=os.path.join(OUTPUT_DIR, 'out_scenario_approval_improvement.png')
+    #     path=os.path.join(OUTPUT_DIR, 'strat_scenario_approval_improvement.png')
     # )
     plot_scenario_overall_improvement(
         res, T_VALS, L_VALS,
-        path=os.path.join(OUTPUT_DIR, 'out_scenario_overall_improvement.png')
+        path=os.path.join(OUTPUT_DIR, 'strat_scenario_overall_improvement.png')
     )
-    plot_approval_diff(res, T_VALS, L_VALS, path=os.path.join(OUTPUT_DIR, 'out_approval_diff.png'))
-    plot_weighted(res, T_VALS, L_VALS, path=os.path.join(OUTPUT_DIR, 'out_weighted.png'))
+    plot_approval_diff(res, T_VALS, L_VALS, path=os.path.join(OUTPUT_DIR, 'strat_approval_diff.png'))
+    plot_weighted(res, T_VALS, L_VALS, path=os.path.join(OUTPUT_DIR, 'strat_weighted.png'))
     # plot_weighted_plurality_improvement(
     #     res, T_VALS, L_VALS,
-    #     path=os.path.join(OUTPUT_DIR, 'out_weighted_plurality_improvement.png')
+    #     path=os.path.join(OUTPUT_DIR, 'strat_weighted_plurality_improvement.png')
     # )
     # plot_weighted_approval_improvement(
     #     res, T_VALS, L_VALS,
-    #     path=os.path.join(OUTPUT_DIR, 'out_weighted_approval_improvement.png')
+    #     path=os.path.join(OUTPUT_DIR, 'strat_weighted_approval_improvement.png')
     # )
     plot_weighted_overall_improvement(
         res, T_VALS, L_VALS,
-        path=os.path.join(OUTPUT_DIR, 'out_weighted_overall_improvement.png')
+        path=os.path.join(OUTPUT_DIR, 'strat_weighted_overall_improvement.png')
     )
-    plot_plurality_delta_heatmap(res, T_VALS, L_VALS, path=os.path.join(OUTPUT_DIR, 'out_plurality_delta_heatmap.png'))
-    plot_approval_delta_heatmap(res, T_VALS, L_VALS, path=os.path.join(OUTPUT_DIR, 'out_approval_delta_heatmap.png'))
+    plot_plurality_delta_heatmap(res, T_VALS, L_VALS, path=os.path.join(OUTPUT_DIR, 'strat_plurality_delta_heatmap.png'))
+    plot_approval_delta_heatmap(res, T_VALS, L_VALS, path=os.path.join(OUTPUT_DIR, 'strat_approval_delta_heatmap.png'))
     plot_elapsed = time.time() - plot_t0
     total_elapsed = time.time() - script_t0
 
