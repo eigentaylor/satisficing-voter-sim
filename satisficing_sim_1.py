@@ -39,7 +39,7 @@ OUTPUT_DIR = 'output/plots'
 LOG_DIR = 'output/logs'
 
 RUN_PAIRED_HYPOTHESIS_TESTS = True
-HYPOTHESIS_ALPHA = 0.05
+HYPOTHESIS_ALPHA = 0.01
 HYPOTHESIS_PAIRS = [
     ('Approval', 'Plurality'),
     ('RCV', 'Plurality'),

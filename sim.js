@@ -264,7 +264,7 @@ let simAborted = false;
 let isSimRunning = false;
 let lastSimResult = null;
 
-const HYPOTHESIS_ALPHA = 0.05;
+const HYPOTHESIS_ALPHA = 0.01;
 
 function orderedEnabledMethods(methods) {
     return Object.keys(METHOD_COLORS).filter(name => methods[name]);
@@ -517,6 +517,15 @@ function fmtP(p) {
     return p.toFixed(4);
 }
 
+function escapeHtml(value) {
+    return String(value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
 function renderHypothesisTests(state) {
     const summaryEl = document.getElementById('hypothesis-summary');
     const tableWrap = document.getElementById('hypothesis-table-wrap');
@@ -591,6 +600,16 @@ function renderHypothesisTests(state) {
     const rowByKey = Object.fromEntries(rows.map(row => [`${row.x}>${row.y}`, row]));
     const methodNames = analysis.methodNames;
     const detailText = row => `${row.takeaway} Pooled mean Δ = ${Number.isFinite(row.pooledMeanDelta) ? row.pooledMeanDelta.toFixed(5) : 'NA'}, pooled p (mean-diff) = ${fmtP(row.pooledMeanP)}, pooled p (sign test) = ${fmtP(row.pooledSignP)}, Bonferroni-significant cells = ${row.sigMeanAdj}/${row.totalCells}.`;
+    const tooltipHtml = row => `
+        <div class="pairwise-hover-title">${escapeHtml(row.x)} vs ${escapeHtml(row.y)}</div>
+        <div class="pairwise-hover-body">${escapeHtml(row.takeaway)}</div>
+        <div class="pairwise-hover-metrics">
+            <span>Pooled mean Δ: ${Number.isFinite(row.pooledMeanDelta) ? row.pooledMeanDelta.toFixed(5) : 'NA'}</span>
+            <span>Mean-diff p: ${fmtP(row.pooledMeanP)}</span>
+            <span>Sign-test p: ${fmtP(row.pooledSignP)}</span>
+            <span>Bonferroni cells: ${row.sigMeanAdj}/${row.totalCells}</span>
+        </div>
+    `;
 
     matrixWrap.innerHTML = `
         <div class="matrix-scroll">
@@ -613,14 +632,15 @@ function renderHypothesisTests(state) {
                                 const cellClass = row ? row.takeawayClass : 'sig-no';
                                 const shortLabel = cellClass === 'sig-yes' ? 'Yes' : (cellClass === 'sig-mixed' ? 'Mixed' : 'No');
                                 const explanation = row ? detailText(row) : `No result for ${rowName} > ${colName}.`;
+                                const hoverCard = row ? tooltipHtml(row) : `<div class="pairwise-hover-title">${escapeHtml(rowName)} vs ${escapeHtml(colName)}</div><div class="pairwise-hover-body">No result available for this comparison.</div>`;
                                 return `
-                                    <td>
+                                    <td class="pairwise-cell-slot">
                                         <button
                                             type="button"
                                             class="pairwise-cell ${cellClass}"
-                                            data-detail="${explanation.replace(/"/g, '&quot;')}"
-                                            title="${explanation.replace(/"/g, '&quot;')}"
+                                            data-detail="${escapeHtml(explanation)}"
                                         >${shortLabel}</button>
+                                        <div class="pairwise-hover-template" hidden>${hoverCard}</div>
                                     </td>
                                 `;
                             }).join('')}
@@ -629,17 +649,54 @@ function renderHypothesisTests(state) {
                 </tbody>
             </table>
         </div>
+        <div class="hypothesis-hover-card" aria-hidden="true"></div>
     `;
 
     detailEl.innerHTML = '<strong>Hover, focus, or tap a matrix cell</strong> to see a plain-language explanation here.';
+    const hoverCardEl = matrixWrap.querySelector('.hypothesis-hover-card');
+    const positionHoverCard = cell => {
+        if (!hoverCardEl) return;
+        hoverCardEl.style.left = '0px';
+        hoverCardEl.style.top = '0px';
+        hoverCardEl.classList.add('is-visible');
+
+        const rect = cell.getBoundingClientRect();
+        const cardRect = hoverCardEl.getBoundingClientRect();
+        const gap = 12;
+        const maxLeft = Math.max(gap, window.innerWidth - cardRect.width - gap);
+        const centeredLeft = rect.left + rect.width / 2 - cardRect.width / 2;
+        const left = Math.min(Math.max(gap, centeredLeft), maxLeft);
+        const placeAbove = rect.top >= cardRect.height + gap * 2;
+        const top = placeAbove ? rect.top - cardRect.height - gap : rect.bottom + gap;
+
+        hoverCardEl.style.left = `${left}px`;
+        hoverCardEl.style.top = `${Math.max(gap, top)}px`;
+        hoverCardEl.dataset.side = placeAbove ? 'top' : 'bottom';
+    };
+    const hideHoverCard = () => {
+        if (!hoverCardEl) return;
+        hoverCardEl.classList.remove('is-visible');
+        hoverCardEl.setAttribute('aria-hidden', 'true');
+    };
+
     matrixWrap.querySelectorAll('.pairwise-cell').forEach(cell => {
         const update = () => {
-            detailEl.textContent = cell.dataset.detail || '';
+            if (detailEl) detailEl.textContent = cell.dataset.detail || '';
+            if (!hoverCardEl) return;
+            const template = cell.parentElement?.querySelector('.pairwise-hover-template');
+            if (!template) return;
+            hoverCardEl.innerHTML = template.innerHTML;
+            hoverCardEl.setAttribute('aria-hidden', 'false');
+            positionHoverCard(cell);
         };
         cell.addEventListener('mouseenter', update);
         cell.addEventListener('focus', update);
         cell.addEventListener('click', update);
+        cell.addEventListener('mouseleave', hideHoverCard);
+        cell.addEventListener('blur', hideHoverCard);
     });
+
+    matrixWrap.addEventListener('mouseleave', hideHoverCard);
 
     tableWrap.innerHTML = `
         <table class="result-table">
