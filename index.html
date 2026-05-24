@@ -102,8 +102,8 @@
                     <label class="toggle"><input type="checkbox" id="m-star" checked /><span>STAR</span></label>
                     <label class="toggle"><input type="checkbox" id="m-condorcet"
                             checked /><span>Condorcet</span></label>
-                    <label class="toggle"><input type="checkbox" id="m-score" checked /><span>Score</span></label>
-                    <label class="toggle"><input type="checkbox" id="m-borda" checked /><span>Borda</span></label>
+                    <label class="toggle"><input type="checkbox" id="m-score" /><span>Score</span></label>
+                    <label class="toggle"><input type="checkbox" id="m-borda" /><span>Borda</span></label>
                 </div>
             </div>
 
@@ -112,6 +112,8 @@
                 <div class="toggle-row">
                     <label class="toggle"><input type="checkbox" id="show-stars" /><span>Show tier stars on bar
                             charts</span></label>
+                    <label class="toggle"><input type="checkbox" id="strategy-on" /><span>Strategic Voting Enabled
+                            <br />(All voters strategic)</span></label>
                 </div>
             </div>
 
@@ -256,10 +258,12 @@
                         <li><strong>Hypothesis X &gt; Y</strong> means: "is there evidence that method X is better than
                             method Y?"</li>
                         <li><strong>In the matrix</strong>, each row-vs-column cell asks whether the
-                            <strong>row</strong> method is better than the <strong>column</strong> method.</li>
+                            <strong>row</strong> method is better than the <strong>column</strong> method.
+                        </li>
                         <li><strong>Green</strong> means evidence supports the row method being better,
                             <strong>yellow</strong> means mixed or weak evidence, and <strong>red</strong> means no
-                            clear evidence.</li>
+                            clear evidence.
+                        </li>
                         <li><strong>Pooled p-values</strong> summarize the whole simulation in one number per
                             hypothesis.</li>
                         <li><strong>Per-grid nominal sig</strong> counts cells significant before multiple-testing
@@ -357,6 +361,20 @@
                     the ballot is identical to the full-energy ballot. For a typical voter
                     $\mathbb{E}[k_i^*] \approx m/2$, so approval "saturates" near $\ell = 0.5$ on average.
                     Ranking/scoring methods lose information monotonically as $\ell$ decreases.
+                </p>
+            </details>
+            <details>
+                <summary>Strategic voting mode</summary>
+                <p>
+                    By default, simulation runs assume honest ballots from perceived utilities. Turning on
+                    <strong>Strategic Voting Enabled (All voters strategic)</strong> applies a polling-based strategic
+                    model in which every voter uses method-specific tactical behavior.
+                </p>
+                <p>
+                    This mode is useful for side-by-side comparison against the honest baseline. For technical details
+                    on the strategy model and per-method behavior, see
+                    <a href="https://github.com/eigentaylor/satisficing-voter-sim#strategic-voting-mode-browser-tool"
+                        target="_blank" rel="noopener">README on GitHub</a>.
                 </p>
             </details>
         </section>

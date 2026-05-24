@@ -103,41 +103,220 @@ function argmax(arr) {
     return best;
 }
 
-// ── Voting methods ────────────────────────────────────────────────────────────
-
-function plurality(pu) {
-    const nv = pu.length, nc = pu[0].length;
-    const fp = new Array(nc).fill(0);
-    for (let i = 0; i < nv; i++) fp[argmax(pu[i])]++;
-    return argmax(fp);
+function clip(x, lo, hi) {
+    return Math.min(hi, Math.max(lo, x));
 }
 
-function approval(pu, l) {
-    const nv = pu.length, nc = pu[0].length;
+function bincount(values, length) {
+    const out = new Array(length).fill(0);
+    for (const v of values) out[v]++;
+    return out;
+}
+
+function strategicVoterMask(nv, share) {
+    const p = clip(share, 0, 1);
+    const mask = new Array(nv);
+    for (let i = 0; i < nv; i++) mask[i] = rng() < p;
+    return mask;
+}
+
+function frontAndTarget(polls, useThird = false) {
+    const order = Array.from({ length: polls.length }, (_, i) => i).sort((a, b) => polls[b] - polls[a]);
+    const front = order[0];
+    if (order.length === 1) return [front, front];
+    if (useThird && order.length >= 3) return [front, order[2]];
+    return [front, order[1]];
+}
+
+function topKMask(pu, l) {
+    const nv = pu.length;
+    const nc = pu[0].length;
     const tidxAll = topIdx(pu, l);
-    const scores = new Array(nc).fill(0);
+    const K = tidxAll[0].length;
+    const considered = Array.from({ length: nv }, () => new Array(nc).fill(false));
+    for (let i = 0; i < nv; i++) {
+        for (const c of tidxAll[i]) considered[i][c] = true;
+    }
+    return { tidxAll, K, considered };
+}
+
+function scoreRowFromFrontTarget(row, front, target, topRank = 5) {
+    const pref = row[target] > row[front] ? target : front;
+    const other = pref === target ? front : target;
+    const hi = row[pref];
+    const lo = row[other];
+    if (Math.abs(hi - lo) < 1e-12) {
+        return row.map(v => (v >= hi ? topRank : 0));
+    }
+    const out = new Array(row.length).fill(0);
+    for (let c = 0; c < row.length; c++) {
+        const scaled = (topRank + 0.99) * (row[c] - lo) / (hi - lo);
+        out[c] = clip(Math.floor(scaled), 0, topRank);
+    }
+    return out;
+}
+
+function irvWinnerFromBallots(ballots, nc) {
+    const nv = ballots.length;
+    const K = ballots[0].length;
+    const remaining = new Array(nc).fill(true);
+    for (let round = 0; round < nc - 1; round++) {
+        const active = [];
+        for (let c = 0; c < nc; c++) if (remaining[c]) active.push(c);
+        if (active.length === 1) return active[0];
+
+        const fp = new Array(nc).fill(0);
+        for (let i = 0; i < nv; i++) {
+            for (let k = 0; k < K; k++) {
+                const cand = ballots[i][k];
+                if (remaining[cand]) {
+                    fp[cand]++;
+                    break;
+                }
+            }
+        }
+        const total = fp.reduce((s, x) => s + x, 0);
+        const majority = active.find(c => fp[c] > total / 2);
+        if (majority !== undefined) return majority;
+
+        let elim = active[0];
+        for (const c of active) if (fp[c] < fp[elim]) elim = c;
+        remaining[elim] = false;
+    }
+    return remaining.findIndex(x => x);
+}
+
+function rankMat(pu, l) {
+    const nv = pu.length;
+    const nc = pu[0].length;
+    const tidxAll = topIdx(pu, l);
+    const K = tidxAll[0].length;
+    const rm = Array.from({ length: nv }, () => new Array(nc).fill(K));
+    for (let i = 0; i < nv; i++) {
+        for (let k = 0; k < K; k++) rm[i][tidxAll[i][k]] = k;
+    }
+    return { rm, K, tidxAll };
+}
+
+function condorcetWinnerFromRankMat(rm) {
+    const nv = rm.length;
+    const nc = rm[0].length;
+    const pairwise = Array.from({ length: nc }, () => new Array(nc).fill(0));
+    for (let a = 0; a < nc; a++) {
+        for (let b = a + 1; b < nc; b++) {
+            let wa = 0;
+            let wb = 0;
+            for (let i = 0; i < nv; i++) {
+                if (rm[i][a] < rm[i][b]) wa++;
+                else if (rm[i][b] < rm[i][a]) wb++;
+            }
+            pairwise[a][b] = wa;
+            pairwise[b][a] = wb;
+        }
+    }
+    const worstDefeat = pairwise.map((row, a) => {
+        let worst = 0;
+        for (let b = 0; b < nc; b++) {
+            if (b === a) continue;
+            worst = Math.max(worst, pairwise[b][a] - row[b]);
+        }
+        return worst;
+    });
+    return { winner: worstDefeat.indexOf(Math.min(...worstDefeat)), pairwise };
+}
+
+// ── Voting methods ────────────────────────────────────────────────────────────
+
+function pluralityWinner(pu, useStrategy = false, strategyShare = 1.0) {
+    const nv = pu.length, nc = pu[0].length;
+    const top1 = pu.map(row => argmax(row));
+    const polls = bincount(top1, nc);
+    if (!useStrategy) return { winner: argmax(polls), polls };
+
+    const [front, target] = frontAndTarget(polls);
+    const stratMask = strategicVoterMask(nv, strategyShare);
+    const top1Strat = top1.slice();
+    for (let i = 0; i < nv; i++) {
+        if (!stratMask[i]) continue;
+        top1Strat[i] = pu[i][target] > pu[i][front] ? target : front;
+    }
+    const counts = bincount(top1Strat, nc);
+    return { winner: argmax(counts), polls };
+}
+
+function approvalWinner(pu, l, useStrategy = false, strategyShare = 1.0) {
+    const nv = pu.length;
+    const nc = pu[0].length;
+    const { tidxAll, considered } = topKMask(pu, l);
+    const approvals = Array.from({ length: nv }, () => new Array(nc).fill(false));
     for (let i = 0; i < nv; i++) {
         const row = pu[i];
         const globalMean = row.reduce((s, x) => s + x, 0) / nc;
-        const considered = new Set(tidxAll[i]);
-        let approved = 0;
-        for (const c of considered) {
-            if (row[c] > globalMean) { scores[c]++; approved++; }
+        for (let c = 0; c < nc; c++) {
+            approvals[i][c] = considered[i][c] && row[c] > globalMean;
         }
-        if (approved === 0) scores[tidxAll[i][0]]++;
+        if (!approvals[i].some(Boolean)) approvals[i][tidxAll[i][0]] = true;
     }
-    return argmax(scores);
+    const polls = new Array(nc).fill(0);
+    for (let i = 0; i < nv; i++) {
+        for (let c = 0; c < nc; c++) if (approvals[i][c]) polls[c]++;
+    }
+    if (useStrategy) {
+        const [front, target] = frontAndTarget(polls);
+        const stratMask = strategicVoterMask(nv, strategyShare);
+        for (let i = 0; i < nv; i++) {
+            if (!stratMask[i]) continue;
+            const pivot = (pu[i][front] + pu[i][target]) / 2;
+            const rowApprovals = new Array(nc).fill(false);
+            for (let c = 0; c < nc; c++) {
+                rowApprovals[c] = considered[i][c] && pu[i][c] >= pivot;
+            }
+            const prefersTarget = pu[i][target] > pu[i][front];
+            if (prefersTarget) {
+                rowApprovals[front] = false;
+                rowApprovals[target] = considered[i][target];
+            } else {
+                rowApprovals[target] = false;
+                rowApprovals[front] = considered[i][front];
+            }
+            if (!rowApprovals.some(Boolean)) rowApprovals[tidxAll[i][0]] = true;
+            approvals[i] = rowApprovals;
+        }
+    }
+
+    const totals = new Array(nc).fill(0);
+    for (let i = 0; i < nv; i++) {
+        for (let c = 0; c < nc; c++) if (approvals[i][c]) totals[c]++;
+    }
+    return { winner: argmax(totals), polls };
 }
 
-function borda(pu, l) {
-    const nv = pu.length, nc = pu[0].length;
+function bordaWinner(pu, l, useStrategy = false, strategyShare = 1.0) {
+    const nv = pu.length;
+    const nc = pu[0].length;
     const tidxAll = topIdx(pu, l);
     const K = tidxAll[0].length;
+    const pts = Array.from({ length: K }, (_, i) => K - i);
+    const honestScores = new Array(nc).fill(0);
+    for (let i = 0; i < nv; i++) {
+        for (let k = 0; k < K; k++) honestScores[tidxAll[i][k]] += pts[k];
+    }
+    const polls = honestScores.slice();
+    if (!useStrategy) return { winner: argmax(honestScores), polls };
+
+    const [front, target] = frontAndTarget(polls);
+    const stratMask = strategicVoterMask(nv, strategyShare);
+    const pollOrderDesc = Array.from({ length: nc }, (_, i) => i).sort((a, b) => polls[b] - polls[a]);
     const scores = new Array(nc).fill(0);
     for (let i = 0; i < nv; i++) {
-        for (let k = 0; k < K; k++) scores[tidxAll[i][k]] += K - k;
+        let order = tidxAll[i].slice();
+        if (stratMask[i] && K > 1 && order.includes(front) && order.includes(target)) {
+            const middle = pollOrderDesc.filter(c => order.includes(c) && c !== front && c !== target).reverse();
+            order = pu[i][target] > pu[i][front] ? [target, ...middle, front] : [front, ...middle, target];
+        }
+        for (let k = 0; k < K; k++) scores[order[k]] += pts[k];
     }
-    return argmax(scores);
+    return { winner: argmax(scores), polls };
 }
 
 function globalScoreBallots(pu, l) {
@@ -156,102 +335,145 @@ function globalScoreBallots(pu, l) {
     return ballots;
 }
 
-function scoreVote(pu, l) {
+function scoreWinner(pu, l, useStrategy = false, strategyShare = 1.0) {
+    const nv = pu.length;
+    const nc = pu[0].length;
     const ballots = globalScoreBallots(pu, l);
-    const nc = ballots[0].length;
+    const polls = new Array(nc).fill(0);
+    for (let i = 0; i < nv; i++) {
+        for (let c = 0; c < nc; c++) polls[c] += ballots[i][c];
+    }
+    if (useStrategy) {
+        const [front, target] = frontAndTarget(polls);
+        const { tidxAll, considered } = topKMask(pu, l);
+        const stratMask = strategicVoterMask(nv, strategyShare);
+        for (let i = 0; i < nv; i++) {
+            if (!stratMask[i]) continue;
+            const row = scoreRowFromFrontTarget(pu[i], front, target, 5);
+            const stratRow = new Array(nc).fill(0);
+            for (let c = 0; c < nc; c++) {
+                if (considered[i][c]) stratRow[c] = row[c];
+            }
+            if (!stratRow.some(x => x > 0)) stratRow[tidxAll[i][0]] = 5;
+            ballots[i] = stratRow;
+        }
+    }
+
     const totals = new Array(nc).fill(0);
-    for (const ballot of ballots) for (let j = 0; j < nc; j++) totals[j] += ballot[j];
-    return argmax(totals);
+    for (let i = 0; i < nv; i++) {
+        for (let c = 0; c < nc; c++) totals[c] += ballots[i][c];
+    }
+    return { winner: argmax(totals), polls, ballots };
 }
 
-function star(pu, l) {
-    const ballots = globalScoreBallots(pu, l);
-    const nv = ballots.length, nc = ballots[0].length;
+function starWinner(pu, l, useStrategy = false, strategyShare = 1.0) {
+    const { ballots, polls } = scoreWinner(pu, l, useStrategy, strategyShare);
+    const nv = ballots.length;
+    const nc = ballots[0].length;
     const totals = new Array(nc).fill(0);
-    for (let i = 0; i < nv; i++) for (let j = 0; j < nc; j++) totals[j] += ballots[i][j];
+    for (let i = 0; i < nv; i++) {
+        for (let c = 0; c < nc; c++) totals[c] += ballots[i][c];
+    }
     const sorted = Array.from({ length: nc }, (_, i) => i).sort((a, b) => totals[b] - totals[a]);
-    const f1 = sorted[0], f2 = sorted[1];
-    let w1 = 0, w2 = 0;
+    const [f1, f2] = sorted;
+    let w1 = 0;
+    let w2 = 0;
     for (let i = 0; i < nv; i++) {
         if (ballots[i][f1] > ballots[i][f2]) w1++;
         else if (ballots[i][f2] > ballots[i][f1]) w2++;
     }
-    return w1 >= w2 ? f1 : f2;
+    return { winner: w1 >= w2 ? f1 : f2, polls };
 }
 
-function condorcet(pu, l) {
-    const nv = pu.length, nc = pu[0].length;
-    const tidxAll = topIdx(pu, l);
-    const K = tidxAll[0].length;
-    // rank matrix: rm[i][c] = rank of c for voter i (0=best), unranked=K
-    const rm = Array.from({ length: nv }, () => new Array(nc).fill(K));
-    for (let i = 0; i < nv; i++) for (let k = 0; k < K; k++) rm[i][tidxAll[i][k]] = k;
-    // pairwise counts: only strict preferences count, ties are ignored
-    const pairwise = Array.from({ length: nc }, () => new Array(nc).fill(0));
+function condorcetWinner(pu, l, useStrategy = false, strategyShare = 1.0) {
+    const nv = pu.length;
+    const { rm, K, tidxAll } = rankMat(pu, l);
+    const honest = condorcetWinnerFromRankMat(rm);
+    const nc = rm[0].length;
+    const polls = new Array(nc).fill(0);
     for (let a = 0; a < nc; a++) {
-        for (let b = a + 1; b < nc; b++) {
-            let wa = 0, wb = 0;
-            for (let i = 0; i < nv; i++) {
-                if (rm[i][a] < rm[i][b]) wa++;
-                else if (rm[i][b] < rm[i][a]) wb++;
-            }
-            pairwise[a][b] = wa;
-            pairwise[b][a] = wb;
+        for (let b = 0; b < nc; b++) {
+            if (a !== b && honest.pairwise[a][b] > honest.pairwise[b][a]) polls[a]++;
         }
     }
-    // Minimax fallback: choose the candidate with the smallest worst defeat margin.
-    const worstDefeat = pairwise.map((row, a) => {
-        let worst = 0;
-        for (let b = 0; b < nc; b++) {
-            if (b === a) continue;
-            worst = Math.max(worst, pairwise[b][a] - row[b]);
+    if (!useStrategy) return { winner: honest.winner, polls };
+
+    const [front, target] = frontAndTarget(polls);
+    const stratMask = strategicVoterMask(nv, strategyShare);
+    const pollOrder = Array.from({ length: nc }, (_, i) => i).sort((a, b) => polls[b] - polls[a]);
+
+    for (let i = 0; i < nv; i++) {
+        if (!stratMask[i]) continue;
+        let order = tidxAll[i].slice();
+        if (pu[i][target] > pu[i][front] && order.includes(front) && order.includes(target)) {
+            const others = pollOrder.filter(c => order.includes(c) && c !== front && c !== target);
+            const notTooBad = Math.min(pu[i][front], pu[i][target]);
+            const decent = others.filter(c => pu[i][c] >= notTooBad).sort((a, b) => pu[i][b] - pu[i][a]);
+            const bad = others.filter(c => pu[i][c] < notTooBad).sort((a, b) => pu[i][b] - pu[i][a]);
+            order = [...decent, target, ...bad, front];
+        } else {
+            const others = pollOrder.filter(c => order.includes(c) && c !== front).sort((a, b) => pu[i][b] - pu[i][a]);
+            order = [front, ...others];
         }
-        return worst;
-    });
-    return worstDefeat.indexOf(Math.min(...worstDefeat));
+
+        rm[i].fill(K);
+        for (let k = 0; k < order.length; k++) rm[i][order[k]] = k;
+    }
+
+    return { winner: condorcetWinnerFromRankMat(rm).winner, polls };
 }
 
-function irv(pu, l) {
-    const nv = pu.length, nc = pu[0].length;
-    const tidxAll = topIdx(pu, l);
-    const K = tidxAll[0].length;
-    // each voter's preference order (truncated)
-    const ballots = tidxAll; // already sorted by pu desc
-    const remaining = new Array(nc).fill(true);
+function irvWinner(pu, l, useStrategy = false, strategyShare = 1.0) {
+    const nv = pu.length;
+    const nc = pu[0].length;
+    const ballots = topIdx(pu, l);
+    const K = ballots[0].length;
+    const polls = new Array(nc).fill(0);
+    for (let i = 0; i < nv; i++) polls[ballots[i][0]]++;
+    if (!useStrategy) return { winner: irvWinnerFromBallots(ballots, nc), polls };
 
-    for (let round = 0; round < nc - 1; round++) {
-        const active = [];
-        for (let c = 0; c < nc; c++) if (remaining[c]) active.push(c);
-        if (active.length === 1) return active[0];
+    const [front, target] = frontAndTarget(polls);
+    const pollOrderDesc = Array.from({ length: nc }, (_, i) => i).sort((a, b) => polls[b] - polls[a]);
+    const stratMask = strategicVoterMask(nv, strategyShare);
+    for (let i = 0; i < nv; i++) {
+        if (!stratMask[i]) continue;
+        const order = ballots[i].slice();
+        const winnerQ = pu[i][front];
+        const targQ = pu[i][target];
 
-        const fp = new Array(nc).fill(0);
-        for (let i = 0; i < nv; i++) {
-            for (let k = 0; k < K; k++) {
-                if (remaining[ballots[i][k]]) { fp[ballots[i][k]]++; break; }
-            }
+        let byPollLoserToWinner = pollOrderDesc.slice().reverse().filter(c => order.includes(c) && c !== front);
+        const stratOrder = [];
+        if (order.includes(target) && targQ > winnerQ) {
+            stratOrder.push(target);
+            byPollLoserToWinner = byPollLoserToWinner.filter(c => c !== target);
         }
-        const total = active.reduce((s, c) => s + fp[c], 0);
-        const winner = active.find(c => fp[c] > total / 2);
-        if (winner !== undefined) return winner;
-        // eliminate lowest
-        let minFP = Infinity, elim = -1;
-        for (const c of active) if (fp[c] < minFP) { minFP = fp[c]; elim = c; }
-        remaining[elim] = false;
+
+        for (const c of byPollLoserToWinner) if (pu[i][c] > winnerQ) stratOrder.push(c);
+        if (order.includes(front)) stratOrder.push(front);
+        for (const c of byPollLoserToWinner) if (pu[i][c] <= winnerQ) stratOrder.push(c);
+
+        const missing = order.filter(c => !stratOrder.includes(c)).sort((a, b) => pu[i][b] - pu[i][a]);
+        if (missing.length) stratOrder.push(...missing);
+
+        ballots[i] = stratOrder.slice(0, K);
     }
-    return remaining.findIndex(x => x);
+
+    return { winner: irvWinnerFromBallots(ballots, nc), polls };
 }
 
 // ── Method registry ───────────────────────────────────────────────────────────
 
-function buildMethods(enabled) {
+function buildMethods(enabled, options = {}) {
+    const useStrategy = Boolean(options.useStrategy);
+    const strategyShare = Number.isFinite(options.strategyShare) ? options.strategyShare : 1.0;
     const all = {
-        Plurality: (pu, l) => plurality(pu),
-        Approval: (pu, l) => approval(pu, l),
-        RCV: (pu, l) => irv(pu, l),
-        STAR: (pu, l) => star(pu, l),
-        Condorcet: (pu, l) => condorcet(pu, l),
-        Score: (pu, l) => scoreVote(pu, l),
-        Borda: (pu, l) => borda(pu, l),
+        Plurality: (pu, l) => pluralityWinner(pu, useStrategy, strategyShare).winner,
+        Approval: (pu, l) => approvalWinner(pu, l, useStrategy, strategyShare).winner,
+        RCV: (pu, l) => irvWinner(pu, l, useStrategy, strategyShare).winner,
+        STAR: (pu, l) => starWinner(pu, l, useStrategy, strategyShare).winner,
+        Condorcet: (pu, l) => condorcetWinner(pu, l, useStrategy, strategyShare).winner,
+        Score: (pu, l) => scoreWinner(pu, l, useStrategy, strategyShare).winner,
+        Borda: (pu, l) => bordaWinner(pu, l, useStrategy, strategyShare).winner,
     };
     const out = {};
     for (const k of Object.keys(all)) if (enabled[k]) out[k] = all[k];
@@ -548,7 +770,8 @@ function renderHypothesisTests(state) {
     }
 
     emptyEl.style.display = 'none';
-    summaryEl.textContent = `Alpha = ${analysis.alpha.toFixed(2)}. The matrix below compares every enabled method against every other enabled method. Each cell answers the directional question “is the row method better than the column method?” using the pooled evidence, with Bonferroni-adjusted per-grid counts shown in the detailed table.`;
+    const modeText = state.useStrategy ? 'Strategic mode (all voters strategic)' : 'Honest mode';
+    summaryEl.textContent = `${modeText}. Alpha = ${analysis.alpha.toFixed(2)}. The matrix below compares every enabled method against every other enabled method. Each cell answers the directional question “is the row method better than the column method?” using the pooled evidence, with Bonferroni-adjusted per-grid counts shown in the detailed table.`;
 
     const rows = [];
     for (const [x, y] of analysis.pairs) {
@@ -737,9 +960,9 @@ function renderHypothesisTests(state) {
                 <thead>
                     <tr>
                         ${sortColumns.map(col => {
-                            const active = col.key === hypothesisTableSort.key;
-                            const arrow = active ? (hypothesisTableSort.dir === 'asc' ? '▲' : '▼') : '↕';
-                            return `
+            const active = col.key === hypothesisTableSort.key;
+            const arrow = active ? (hypothesisTableSort.dir === 'asc' ? '▲' : '▼') : '↕';
+            return `
                                 <th>
                                     <button
                                         type="button"
@@ -752,7 +975,7 @@ function renderHypothesisTests(state) {
                                     </button>
                                 </th>
                             `;
-                        }).join('')}
+        }).join('')}
                     </tr>
                 </thead>
                 <tbody>
@@ -1602,21 +1825,25 @@ function plotApprovalDiff(res, tVals, lVals, methods) {
 // ── UI wiring ─────────────────────────────────────────────────────────────────
 
 function getParams() {
+    const useStrategy = document.getElementById('strategy-on')?.checked ?? false;
+    const enabledMethods = {
+        Plurality: document.getElementById('m-plurality').checked,
+        RCV: document.getElementById('m-irv').checked,
+        Borda: document.getElementById('m-borda').checked,
+        Score: document.getElementById('m-score').checked,
+        Approval: document.getElementById('m-approval').checked,
+        STAR: document.getElementById('m-star').checked,
+        Condorcet: document.getElementById('m-condorcet').checked,
+    };
     return {
         nv: +document.getElementById('nv').value,
         nc: +document.getElementById('nc').value,
         ntr: +document.getElementById('ntr').value,
         ng: +document.getElementById('ng').value,
         nd: +document.getElementById('nd').value,
-        methods: buildMethods({
-            Plurality: document.getElementById('m-plurality').checked,
-            RCV: document.getElementById('m-irv').checked,
-            Borda: document.getElementById('m-borda').checked,
-            Score: document.getElementById('m-score').checked,
-            Approval: document.getElementById('m-approval').checked,
-            STAR: document.getElementById('m-star').checked,
-            Condorcet: document.getElementById('m-condorcet').checked,
-        }),
+        useStrategy,
+        strategyShare: 1.0,
+        methods: buildMethods(enabledMethods, { useStrategy, strategyShare: 1.0 }),
     };
 }
 
@@ -1765,7 +1992,7 @@ document.getElementById('run-btn').addEventListener('click', async () => {
         statusEl.textContent = 'Rendering plots…';
         await sleep(0);
 
-        lastSimResult = { res, tVals, lVals, trialVse, methods: params.methods };
+        lastSimResult = { res, tVals, lVals, trialVse, methods: params.methods, useStrategy: params.useStrategy };
         renderChartsFromState(lastSimResult);
 
         document.getElementById('results').style.display = 'block';
@@ -1773,7 +2000,8 @@ document.getElementById('run-btn').addEventListener('click', async () => {
 
         progressBar.style.width = '100%';
         progressLabel.textContent = '100%';
-        statusEl.textContent = `Done. ${params.ng * params.ng} grid points × ${params.ntr} trials each.`;
+        const modeLabel = params.useStrategy ? 'strategic mode' : 'honest mode';
+        statusEl.textContent = `Done (${modeLabel}). ${params.ng * params.ng} grid points × ${params.ntr} trials each.`;
     } catch (err) {
         statusEl.textContent = 'Simulation failed. Check console for details.';
         console.error(err);
