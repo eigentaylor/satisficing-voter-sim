@@ -265,15 +265,10 @@ let isSimRunning = false;
 let lastSimResult = null;
 
 const HYPOTHESIS_ALPHA = 0.05;
-const HYPOTHESIS_PAIRS = [
-    ['Approval', 'Plurality'],
-    ['RCV', 'Plurality'],
-    ['Approval', 'RCV'],
-    ['STAR', 'Approval'],
-    ['Condorcet', 'Approval'],
-    ['Borda', 'Approval'],
-    ['Score', 'Approval'],
-];
+
+function orderedEnabledMethods(methods) {
+    return Object.keys(METHOD_COLORS).filter(name => methods[name]);
+}
 
 function erfApprox(x) {
     const sign = x < 0 ? -1 : 1;
@@ -370,7 +365,13 @@ function bonferroniAdjust(pvals) {
 function analyzeHypotheses(trialVse, tVals, lVals, methods) {
     if (!trialVse) return null;
 
-    const enabledPairs = HYPOTHESIS_PAIRS.filter(([x, y]) => methods[x] && methods[y]);
+    const enabledMethodNames = orderedEnabledMethods(methods);
+    const enabledPairs = [];
+    for (const x of enabledMethodNames) {
+        for (const y of enabledMethodNames) {
+            if (x !== y) enabledPairs.push([x, y]);
+        }
+    }
     if (!enabledPairs.length) {
         return {
             alpha: HYPOTHESIS_ALPHA,
@@ -378,6 +379,7 @@ function analyzeHypotheses(trialVse, tVals, lVals, methods) {
             pairs: [],
             perGridTests: 0,
             perPair: {},
+            methodNames: enabledMethodNames,
         };
     }
 
@@ -449,6 +451,7 @@ function analyzeHypotheses(trialVse, tVals, lVals, methods) {
         pairs: enabledPairs,
         perPair,
         perGridTests: allMeanP.length,
+        methodNames: enabledMethodNames,
     };
 }
 
@@ -517,21 +520,25 @@ function fmtP(p) {
 function renderHypothesisTests(state) {
     const summaryEl = document.getElementById('hypothesis-summary');
     const tableWrap = document.getElementById('hypothesis-table-wrap');
+    const matrixWrap = document.getElementById('hypothesis-matrix-wrap');
+    const detailEl = document.getElementById('hypothesis-detail');
     const emptyEl = document.getElementById('hypothesis-empty');
 
-    if (!summaryEl || !tableWrap || !emptyEl) return;
+    if (!summaryEl || !tableWrap || !matrixWrap || !detailEl || !emptyEl) return;
 
     const analysis = analyzeHypotheses(state.trialVse, state.tVals, state.lVals, state.methods);
     if (!analysis || analysis.pairs.length === 0) {
+        matrixWrap.innerHTML = '';
         tableWrap.innerHTML = '';
+        detailEl.innerHTML = '';
         summaryEl.textContent = '';
         emptyEl.style.display = 'block';
-        emptyEl.textContent = 'Enable method combinations matching at least one configured hypothesis pair to see statistical test results.';
+        emptyEl.textContent = 'Enable at least two methods to see pairwise evidence between methods.';
         return;
     }
 
     emptyEl.style.display = 'none';
-    summaryEl.textContent = `Alpha = ${analysis.alpha.toFixed(2)}. Per-grid family: ${analysis.perGridTests} tests (${analysis.correction}). Read pooled p-values as the overall answer, and Bonferroni-adjusted per-grid counts as strict local evidence.`;
+    summaryEl.textContent = `Alpha = ${analysis.alpha.toFixed(2)}. The matrix below compares every enabled method against every other enabled method. Each cell answers the directional question “is the row method better than the column method?” using the pooled evidence, with Bonferroni-adjusted per-grid counts shown in the detailed table.`;
 
     const rows = [];
     for (const [x, y] of analysis.pairs) {
@@ -553,17 +560,19 @@ function renderHypothesisTests(state) {
         const pooledMeanSig = info.pooledMean.p < analysis.alpha;
         const pooledSignSig = info.pooledSign.p < analysis.alpha;
 
-        let takeaway = 'No clear evidence for X > Y';
+        let takeaway = `No clear evidence that ${x} is better than ${y}.`;
         let takeawayClass = 'sig-no';
         if (pooledMeanDelta > 0 && pooledMeanSig && pooledSignSig && sigMeanAdj > 0) {
-            takeaway = 'Evidence supports X > Y';
+            takeaway = `Evidence supports ${x} is better than ${y}.`;
             takeawayClass = 'sig-yes';
         } else if (pooledMeanDelta > 0 && (pooledMeanSig || pooledSignSig || sigMeanAdj > 0)) {
-            takeaway = 'Mixed or weak evidence';
+            takeaway = `Evidence is mixed or weak that ${x} is better than ${y}.`;
             takeawayClass = 'sig-mixed';
         }
 
         rows.push({
+            x,
+            y,
             label: `${x} > ${y}`,
             pooledMeanDelta,
             pooledMeanP: info.pooledMean.p,
@@ -579,6 +588,59 @@ function renderHypothesisTests(state) {
         });
     }
 
+    const rowByKey = Object.fromEntries(rows.map(row => [`${row.x}>${row.y}`, row]));
+    const methodNames = analysis.methodNames;
+    const detailText = row => `${row.takeaway} Pooled mean Δ = ${Number.isFinite(row.pooledMeanDelta) ? row.pooledMeanDelta.toFixed(5) : 'NA'}, pooled p (mean-diff) = ${fmtP(row.pooledMeanP)}, pooled p (sign test) = ${fmtP(row.pooledSignP)}, Bonferroni-significant cells = ${row.sigMeanAdj}/${row.totalCells}.`;
+
+    matrixWrap.innerHTML = `
+        <div class="matrix-scroll">
+            <table class="pairwise-matrix">
+                <thead>
+                    <tr>
+                        <th>Row &gt; Col</th>
+                        ${methodNames.map(name => `<th>${name}</th>`).join('')}
+                    </tr>
+                </thead>
+                <tbody>
+                    ${methodNames.map(rowName => `
+                        <tr>
+                            <th>${rowName}</th>
+                            ${methodNames.map(colName => {
+                                if (rowName === colName) {
+                                    return '<td class="pairwise-diag">-</td>';
+                                }
+                                const row = rowByKey[`${rowName}>${colName}`];
+                                const cellClass = row ? row.takeawayClass : 'sig-no';
+                                const shortLabel = cellClass === 'sig-yes' ? 'Yes' : (cellClass === 'sig-mixed' ? 'Mixed' : 'No');
+                                const explanation = row ? detailText(row) : `No result for ${rowName} > ${colName}.`;
+                                return `
+                                    <td>
+                                        <button
+                                            type="button"
+                                            class="pairwise-cell ${cellClass}"
+                                            data-detail="${explanation.replace(/"/g, '&quot;')}"
+                                            title="${explanation.replace(/"/g, '&quot;')}"
+                                        >${shortLabel}</button>
+                                    </td>
+                                `;
+                            }).join('')}
+                        </tr>
+                    `).join('')}
+                </tbody>
+            </table>
+        </div>
+    `;
+
+    detailEl.innerHTML = '<strong>Hover, focus, or tap a matrix cell</strong> to see a plain-language explanation here.';
+    matrixWrap.querySelectorAll('.pairwise-cell').forEach(cell => {
+        const update = () => {
+            detailEl.textContent = cell.dataset.detail || '';
+        };
+        cell.addEventListener('mouseenter', update);
+        cell.addEventListener('focus', update);
+        cell.addEventListener('click', update);
+    });
+
     tableWrap.innerHTML = `
         <table class="result-table">
             <thead>
@@ -590,7 +652,6 @@ function renderHypothesisTests(state) {
                     <th>Per-grid nominal sig</th>
                     <th>Per-grid Bonf sig (mean-diff)</th>
                     <th>Per-grid Bonf sig (sign)</th>
-                    <th>Lay takeaway</th>
                 </tr>
             </thead>
             <tbody>
@@ -603,7 +664,6 @@ function renderHypothesisTests(state) {
                         <td>${r.sigMeanNom}/${r.totalCells}</td>
                         <td>${r.sigMeanAdj}/${r.totalCells}</td>
                         <td>${r.sigSignAdj}/${r.totalCells}</td>
-                        <td class="${r.takeawayClass}">${r.takeaway}</td>
                     </tr>
                 `).join('')}
             </tbody>

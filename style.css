@@ -487,6 +487,83 @@ input[type="range"]::-webkit-slider-thumb:hover {
     margin-bottom: 0.75rem;
 }
 
+.matrix-wrap {
+    margin-bottom: 0.75rem;
+}
+
+.matrix-scroll {
+    overflow-x: auto;
+}
+
+.pairwise-matrix {
+    width: 100%;
+    min-width: 760px;
+    border-collapse: collapse;
+    background: var(--panel2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+}
+
+.pairwise-matrix th,
+.pairwise-matrix td {
+    border-bottom: 1px solid var(--border);
+    border-right: 1px solid var(--border);
+    padding: 0.35rem;
+    text-align: center;
+    font-size: 0.82rem;
+}
+
+.pairwise-matrix th {
+    color: var(--text);
+    background: #1a1a1a;
+    font-weight: 600;
+}
+
+.pairwise-diag {
+    color: #555;
+    background: #151515;
+}
+
+.pairwise-cell {
+    width: 100%;
+    min-width: 54px;
+    border: none;
+    border-radius: 6px;
+    padding: 0.45rem 0.25rem;
+    font-size: 0.8rem;
+    font-weight: 700;
+    cursor: pointer;
+    color: #0d0d0d;
+}
+
+.pairwise-cell.sig-yes {
+    background: #7fe39a;
+}
+
+.pairwise-cell.sig-mixed {
+    background: #e5c96e;
+}
+
+.pairwise-cell.sig-no {
+    background: #e08787;
+}
+
+.pairwise-cell:focus-visible {
+    outline: 2px solid #d8d8d8;
+    outline-offset: 1px;
+}
+
+.hypothesis-detail {
+    margin-bottom: 0.85rem;
+    background: var(--panel2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 0.7rem 0.85rem;
+    color: var(--muted);
+    font-size: 0.85rem;
+    line-height: 1.55;
+}
+
 .table-wrap {
     overflow-x: auto;
 }

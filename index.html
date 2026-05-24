@@ -245,6 +245,8 @@
                     <p><strong>How to read this (plain language):</strong></p>
                     <ul>
                         <li><strong>Hypothesis X &gt; Y</strong> means: "is there evidence that method X is better than method Y?"</li>
+                        <li><strong>In the matrix</strong>, each row-vs-column cell asks whether the <strong>row</strong> method is better than the <strong>column</strong> method.</li>
+                        <li><strong>Green</strong> means evidence supports the row method being better, <strong>yellow</strong> means mixed or weak evidence, and <strong>red</strong> means no clear evidence.</li>
                         <li><strong>Pooled p-values</strong> summarize the whole simulation in one number per hypothesis.</li>
                         <li><strong>Per-grid nominal sig</strong> counts cells significant before multiple-testing correction.</li>
                         <li><strong>Per-grid Bonf sig</strong> is stricter and controls false positives across all pair-cell tests.</li>
@@ -255,6 +257,8 @@
                 </div>
                 <p id="hypothesis-empty" class="chart-desc" style="display:none"></p>
                 <div id="hypothesis-summary" class="hypothesis-summary"></div>
+                <div id="hypothesis-matrix-wrap" class="matrix-wrap"></div>
+                <div id="hypothesis-detail" class="hypothesis-detail"></div>
                 <div id="hypothesis-table-wrap" class="table-wrap"></div>
             </div>
 
