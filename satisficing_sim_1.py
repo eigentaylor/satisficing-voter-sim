@@ -13,7 +13,6 @@ Code written by Anthropic's Claude, slightly modified by me
 
 import numpy as np
 import os
-import sys
 from datetime import datetime
 import matplotlib
 matplotlib.use('Agg')
@@ -37,6 +36,8 @@ L_VALS = np.linspace(1/N_CANDS, 1.0, N_L)   # min = consider 1 candidate
 OUTPUT_DIR = 'output/plots'
 LOG_DIR = 'output/logs'
 
+SUMMARY_LINES = []
+
 # ── dark palette ──────────────────────────────────────────────────────────────
 BG       = '#0d0d0d'
 PANEL    = '#161616'
@@ -55,65 +56,23 @@ COLORS = {
 }
 
 
-class _TeeStdout:
-    """Mirror stdout to terminal and a log file with minimal intrusion."""
-
-    def __init__(self, path):
-        self.path = path
-        self._terminal = sys.stdout
-        self._fh = None
-
-    def __enter__(self):
-        os.makedirs(os.path.dirname(self.path), exist_ok=True)
-        self._fh = open(self.path, 'w', encoding='utf-8')
-        sys.stdout = self
-        return self
-
-    def __exit__(self, exc_type, exc, tb):
-        sys.stdout = self._terminal
-        if self._fh is not None:
-            self._fh.close()
-
-    def write(self, data):
-        self._terminal.write(data)
-        if self._fh is not None:
-            self._fh.write(data)
-
-    def flush(self):
-        self._terminal.flush()
-        if self._fh is not None:
-            self._fh.flush()
-
-    def isatty(self):
-        return self._terminal.isatty()
+def _summary(msg=''):
+    SUMMARY_LINES.append(msg)
 
 
-def _new_log_path():
-    stamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-    return os.path.join(LOG_DIR, f'simulation_run_{stamp}.txt')
-
-
-def _fmt_method_values(values_by_method, precision=4):
-    return ', '.join(
-        f"{name}={values_by_method[name]:.{precision}f}"
-        for name in values_by_method
-    )
-
-
-def _print_ranked(values_by_method, title, precision=4):
+def _summary_kv_line(values_by_method, stars_by_method, precision=4):
     ordered = sorted(values_by_method.items(), key=lambda kv: kv[1], reverse=True)
-    print(title)
-    for rank, (name, val) in enumerate(ordered, start=1):
-        print(f'    {rank:>2}. {name:<10} {val:.{precision}f}')
+    parts = [
+        f"{name}={val:.{precision}f} (stars={stars_by_method.get(name, 0)})"
+        for name, val in ordered
+    ]
+    return ' | '.join(parts)
 
 
-def _print_star_summary(method_names, values, stars):
-    print('    Tier stars (higher cluster => more stars):')
-    for name, val, star_count in zip(method_names, values, stars):
-        if val <= 0:
-            print(f'      - {name:<10} value={val:.4f} stars=0 (non-positive)')
-        else:
-            print(f'      - {name:<10} value={val:.4f} stars={star_count}')
+def _write_summary_log(path):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, 'w', encoding='utf-8') as f:
+        f.write('\n'.join(SUMMARY_LINES) + '\n')
 
 # ── core utilities ────────────────────────────────────────────────────────────
 
@@ -297,14 +256,6 @@ def run_grid(t_vals, l_vals, nv=N_VOTERS, nc=N_CANDS, ntr=N_TRIALS):
                     acc[name] += vse(u[:, w].mean(), sw_r, sw_o)
             for name in METHODS:
                 res[name][li, ti] = acc[name] / ntr
-
-            values_here = {name: res[name][li, ti] for name in METHODS}
-            print(
-                f"[GRID] t={t:.3f} l={l:.3f} K={K_of(l, nc)} | "
-                f"{_fmt_method_values(values_here, precision=4)}"
-            )
-            _print_ranked(values_here, '  Ranking @ this grid point:')
-
             done += 1
             if done % 12 == 0 or done == total:
                 pct = 100 * done / total
@@ -470,12 +421,6 @@ def _plot_delta_heatmaps(res, tv, lv, base_method, compared_methods, title, path
         ax.set_ylabel('Energy  ℓ')
         _cb(fig, im, ax, label='ΔVSE')
 
-        print(
-            f"[DELTA-HEATMAP] {name} - {base_method}: "
-            f"mean={diff.mean():.4f} min={diff.min():.4f} max={diff.max():.4f} "
-            f"positive_cells={(diff > 0).sum()} negative_cells={(diff < 0).sum()}"
-        )
-
     plt.tight_layout()
     fig.savefig(path, dpi=150, bbox_inches='tight', facecolor=BG)
     plt.close()
@@ -505,15 +450,6 @@ def plot_slices(res, tv, lv, path='out_slices.png'):
         ax.set_ylim(0, 1.08)
         ax.legend(facecolor=PANEL, edgecolor=GRID_C,
                   labelcolor=TEXT_C, fontsize=9)
-
-    full_energy = {name: float(res[name][li1, :].mean()) for name in METHODS}
-    full_knowledge = {name: float(res[name][:, ti1].mean()) for name in METHODS}
-    print('[SLICE] Mean VSE along knowledge axis at full energy (l=1):')
-    print(f'  {_fmt_method_values(full_energy)}')
-    _print_ranked(full_energy, '  Ranking by slice mean (l=1):')
-    print('[SLICE] Mean VSE along energy axis at full knowledge (t=1):')
-    print(f'  {_fmt_method_values(full_knowledge)}')
-    _print_ranked(full_knowledge, '  Ranking by slice mean (t=1):')
 
     fig.suptitle('Axis Slices', color=TEXT_C, fontsize=13, y=1.01)
     plt.tight_layout()
@@ -546,14 +482,6 @@ def plot_heatmaps(res, tv, lv, path='out_heatmaps.png'):
     for idx in range(n_methods, n_rows * n_cols):
         fig.add_subplot(gs[idx // n_cols, idx % n_cols]).set_visible(False)
 
-    print('[HEATMAP] Method surface summary (mean/min/max/std over all t,l points):')
-    for name in METHODS:
-        surf = res[name]
-        print(
-            f"  - {name:<10} mean={surf.mean():.4f} min={surf.min():.4f} "
-            f"max={surf.max():.4f} std={surf.std():.4f}"
-        )
-
     fig.suptitle('VSE Surface per Method', color=TEXT_C, fontsize=13, y=1.01)
     fig.savefig(path, dpi=150, bbox_inches='tight', facecolor=BG)
     plt.close()
@@ -584,17 +512,6 @@ def plot_robustness(res, tv, lv, path='out_robustness.png'):
            title='Robustness: how much of the parameter space stays above threshold?')
     ax.set_ylim(0, 1.05)
     ax.legend(facecolor=PANEL, edgecolor=GRID_C, labelcolor=TEXT_C, fontsize=9)
-
-    tau_summary = [0.7, 0.8, 0.9]
-    print('[ROBUSTNESS] Fraction of parameter space with VSE >= tau:')
-    for tau in tau_summary:
-        vals = {
-            name: float((dt * dl * (res[name] >= tau).sum()) / tot)
-            for name in METHODS
-        }
-        print(f'  tau={tau:.2f}: {_fmt_method_values(vals)}')
-        _print_ranked(vals, f'  Ranking by robustness at tau={tau:.2f}:')
-
     plt.tight_layout()
     fig.savefig(path, dpi=150, bbox_inches='tight', facecolor=BG)
     plt.close()
@@ -622,12 +539,13 @@ def plot_scenarios(res, tv, lv, path='out_scenarios.png'):
         ax.set_ylim(0, 1.24)
         _annotate_stars(ax, bars, vals, label_gap=0.06)
 
-        vals_map = {m: float(v) for m, v in zip(METHODS.keys(), vals)}
         stars = _tier_star_counts(vals)
-        print(f'[SCENARIO] {label} at t={tv[ti]:.3f}, l={lv[li]:.3f}:')
-        print(f'  {_fmt_method_values(vals_map)}')
-        _print_ranked(vals_map, '  Ranking by VSE:')
-        _print_star_summary(list(METHODS.keys()), vals, stars)
+        vals_by_method = {m: float(v) for m, v in zip(METHODS.keys(), vals)}
+        stars_by_method = {m: int(s) for m, s in zip(METHODS.keys(), stars)}
+        _summary(
+            f"SCENARIO | {label.replace(chr(10), ' ')} | t={tv[ti]:.3f} | l={lv[li]:.3f} | "
+            + _summary_kv_line(vals_by_method, stars_by_method)
+        )
 
     axes[0].set_ylabel('VSE', color=TEXT_C)
     axes[2].set_ylabel('VSE', color=TEXT_C)
@@ -672,12 +590,13 @@ def _plot_scenario_improvement_against(res, tv, lv, base_method, target_methods,
         ax.set_ylim(y_min, y_max)
         _annotate_stars(ax, bars, vals, label_gap=label_pad + max(0.02, pad * 0.18))
 
-        vals_map = {name: float(v) for name, v in zip(target_methods, vals)}
         stars = _tier_star_counts(vals)
-        print(f'[SCENARIO-DELTA] {label} vs {base_method}:')
-        print(f'  {_fmt_method_values(vals_map)}')
-        _print_ranked(vals_map, '  Ranking by scenario improvement:')
-        _print_star_summary(target_methods, vals, stars)
+        vals_by_method = {m: float(v) for m, v in zip(target_methods, vals)}
+        stars_by_method = {m: int(s) for m, s in zip(target_methods, stars)}
+        _summary(
+            f"SCENARIO_IMPROVEMENT | baseline={base_method} | scenario={label.replace(chr(10), ' ')} | "
+            + _summary_kv_line(vals_by_method, stars_by_method)
+        )
 
     axes[0].set_ylabel('Scenario improvement score', color=TEXT_C)
     axes[2].set_ylabel('Scenario improvement score', color=TEXT_C)
@@ -769,13 +688,21 @@ def plot_scenario_overall_improvement(res, tv, lv,
         _label_bars(ax, bars_plurality, plurality_vals, pad=label_pad, fmt='{:.3f}')
         _label_bars(ax, bars_approval, approval_vals, pad=label_pad, fmt='{:.3f}')
 
-        plurality_map = {name: float(v) for name, v in zip(target_methods, plurality_vals)}
-        approval_map = {name: float(v) for name, v in zip(target_methods, approval_vals)}
-        print(f'[SCENARIO-OVERALL] {label}:')
-        print(f"  vs Plurality: {_fmt_method_values(plurality_map)}")
-        _print_ranked(plurality_map, '  Ranking by gain vs Plurality:')
-        print(f"  vs Approval : {_fmt_method_values(approval_map)}")
-        _print_ranked(approval_map, '  Ranking by gain vs Approval:')
+        plurality_stars = _tier_star_counts(plurality_vals)
+        approval_stars = _tier_star_counts(approval_vals)
+        pl_vals_map = {m: float(v) for m, v in zip(target_methods, plurality_vals)}
+        ap_vals_map = {m: float(v) for m, v in zip(target_methods, approval_vals)}
+        pl_stars_map = {m: int(s) for m, s in zip(target_methods, plurality_stars)}
+        ap_stars_map = {m: int(s) for m, s in zip(target_methods, approval_stars)}
+        clean_label = label.replace(chr(10), ' ')
+        _summary(
+            f"SCENARIO_OVERALL | baseline=Plurality | scenario={clean_label} | "
+            + _summary_kv_line(pl_vals_map, pl_stars_map)
+        )
+        _summary(
+            f"SCENARIO_OVERALL | baseline=Approval | scenario={clean_label} | "
+            + _summary_kv_line(ap_vals_map, ap_stars_map)
+        )
 
     axes[0].set_ylabel('Scenario improvement score', color=TEXT_C)
     axes[2].set_ylabel('Scenario improvement score', color=TEXT_C)
@@ -815,12 +742,6 @@ def plot_approval_diff(res, tv, lv, path='out_approval_diff.png'):
         ax.set_ylabel('Energy  ℓ')
         _cb(fig, im, ax, label='ΔVSE')
 
-        print(
-            f"[APPROVAL-DELTA] Approval - {name}: "
-            f"mean={diff.mean():.4f} min={diff.min():.4f} max={diff.max():.4f} "
-            f"positive_cells={(diff > 0).sum()} negative_cells={(diff < 0).sum()}"
-        )
-
     plt.tight_layout()
     fig.savefig(path, dpi=150, bbox_inches='tight', facecolor=BG)
     plt.close()
@@ -849,9 +770,11 @@ def plot_weighted(res, tv, lv, path='out_weighted.png'):
         _annotate_stars(ax, bars, vals, label_gap=0.075)
 
         stars = _tier_star_counts(vals)
-        print(f'[WEIGHTED] {label}: {_fmt_method_values(avgs)}')
-        _print_ranked(avgs, f'  Ranking under prior "{label}":')
-        _print_star_summary(list(METHODS.keys()), vals, stars)
+        stars_by_method = {m: int(s) for m, s in zip(METHODS.keys(), stars)}
+        _summary(
+            f"WEIGHTED_VSE | {label.replace(chr(10), ' ')} | "
+            + _summary_kv_line(avgs, stars_by_method)
+        )
 
     axes[0].set_ylabel('Weighted average VSE', color=TEXT_C)
     axes[2].set_ylabel('Weighted average VSE', color=TEXT_C)
@@ -895,12 +818,13 @@ def _plot_weighted_improvement_against(res, tv, lv, base_method, target_methods,
         ax.set_ylim(y_min, y_max)
         _annotate_stars(ax, bars, vals, label_gap=label_pad + max(0.02, pad * 0.18))
 
-        vals_map = {name: float(v) for name, v in zip(target_methods, vals)}
         stars = _tier_star_counts(vals)
-        print(f'[WEIGHTED-DELTA] Prior "{prior_label}" vs {base_method}:')
-        print(f'  {_fmt_method_values(vals_map)}')
-        _print_ranked(vals_map, '  Ranking by weighted improvement:')
-        _print_star_summary(target_methods, vals, stars)
+        vals_by_method = {m: float(v) for m, v in zip(target_methods, vals)}
+        stars_by_method = {m: int(s) for m, s in zip(target_methods, stars)}
+        _summary(
+            f"WEIGHTED_IMPROVEMENT | baseline={base_method} | prior={prior_label.replace(chr(10), ' ')} | "
+            + _summary_kv_line(vals_by_method, stars_by_method)
+        )
 
     axes[0].set_ylabel('Weighted improvement score', color=TEXT_C)
     axes[2].set_ylabel('Weighted improvement score', color=TEXT_C)
@@ -990,13 +914,21 @@ def plot_weighted_overall_improvement(res, tv, lv,
         _label_bars(ax, bars_plurality, plurality_vals, pad=label_pad, fmt='{:.3f}')
         _label_bars(ax, bars_approval, approval_vals, pad=label_pad, fmt='{:.3f}')
 
-        plurality_map = {name: float(v) for name, v in zip(target_methods, plurality_vals)}
-        approval_map = {name: float(v) for name, v in zip(target_methods, approval_vals)}
-        print(f'[WEIGHTED-OVERALL] Prior "{prior_label}":')
-        print(f"  vs Plurality: {_fmt_method_values(plurality_map)}")
-        _print_ranked(plurality_map, '  Ranking by weighted gain vs Plurality:')
-        print(f"  vs Approval : {_fmt_method_values(approval_map)}")
-        _print_ranked(approval_map, '  Ranking by weighted gain vs Approval:')
+        plurality_stars = _tier_star_counts(plurality_vals)
+        approval_stars = _tier_star_counts(approval_vals)
+        pl_vals_map = {m: float(v) for m, v in zip(target_methods, plurality_vals)}
+        ap_vals_map = {m: float(v) for m, v in zip(target_methods, approval_vals)}
+        pl_stars_map = {m: int(s) for m, s in zip(target_methods, plurality_stars)}
+        ap_stars_map = {m: int(s) for m, s in zip(target_methods, approval_stars)}
+        clean_prior = prior_label.replace(chr(10), ' ')
+        _summary(
+            f"WEIGHTED_OVERALL | baseline=Plurality | prior={clean_prior} | "
+            + _summary_kv_line(pl_vals_map, pl_stars_map)
+        )
+        _summary(
+            f"WEIGHTED_OVERALL | baseline=Approval | prior={clean_prior} | "
+            + _summary_kv_line(ap_vals_map, ap_stars_map)
+        )
 
     axes[0].set_ylabel('Weighted improvement score', color=TEXT_C)
     axes[2].set_ylabel('Weighted improvement score', color=TEXT_C)
@@ -1037,70 +969,77 @@ def plot_approval_delta_heatmap(res, tv, lv, path='out_approval_delta_heatmap.pn
 
 if __name__ == '__main__':
     script_t0 = time.time()
+    print(f'Grid: {N_T}×{N_L}  |  Trials: {N_TRIALS}  |  '
+          f'Voters: {N_VOTERS}  |  Candidates: {N_CANDS}')
     os.makedirs(OUTPUT_DIR, exist_ok=True)
-    log_path = _new_log_path()
+    os.makedirs(LOG_DIR, exist_ok=True)
 
-    with _TeeStdout(log_path):
-        print(f'Log file: {log_path}')
-        print(f'Run started: {datetime.now().isoformat(timespec="seconds")}')
-        print('RNG seed: 42')
-        print(f'Grid: {N_T}×{N_L}  |  Trials: {N_TRIALS}  |  '
-              f'Voters: {N_VOTERS}  |  Candidates: {N_CANDS}')
+    run_stamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    summary_path = os.path.join(LOG_DIR, f'summary_{run_stamp}.log')
 
-        t0 = time.time()
-        res = run_grid(T_VALS, L_VALS)
-        sim_elapsed = time.time() - t0
-        print(f'Simulation done in {sim_elapsed:.1f}s\nGenerating plots...')
+    SUMMARY_LINES.clear()
+    _summary('Satisficing Voter Simulation Summary')
+    _summary(f'run_started={datetime.now().isoformat(timespec="seconds")}')
+    _summary(f'grid={N_T}x{N_L} | trials={N_TRIALS} | voters={N_VOTERS} | candidates={N_CANDS}')
+    _summary('')
+    t0 = time.time()
+    res = run_grid(T_VALS, L_VALS)
+    sim_elapsed = time.time() - t0
+    print(f'Simulation done in {sim_elapsed:.1f}s\nGenerating plots...')
 
-        plot_t0 = time.time()
-        plot_slices(res, T_VALS, L_VALS, path=os.path.join(OUTPUT_DIR, 'out_slices.png'))
-        plot_heatmaps(res, T_VALS, L_VALS, path=os.path.join(OUTPUT_DIR, 'out_heatmaps.png'))
-        plot_robustness(res, T_VALS, L_VALS, path=os.path.join(OUTPUT_DIR, 'out_robustness.png'))
-        plot_scenarios(res, T_VALS, L_VALS, path=os.path.join(OUTPUT_DIR, 'out_scenarios.png'))
-        plot_scenario_plurality_improvement(
-            res, T_VALS, L_VALS,
-            path=os.path.join(OUTPUT_DIR, 'out_scenario_plurality_improvement.png')
-        )
-        plot_scenario_approval_improvement(
-            res, T_VALS, L_VALS,
-            path=os.path.join(OUTPUT_DIR, 'out_scenario_approval_improvement.png')
-        )
-        plot_scenario_overall_improvement(
-            res, T_VALS, L_VALS,
-            path=os.path.join(OUTPUT_DIR, 'out_scenario_overall_improvement.png')
-        )
-        plot_approval_diff(res, T_VALS, L_VALS, path=os.path.join(OUTPUT_DIR, 'out_approval_diff.png'))
-        plot_weighted(res, T_VALS, L_VALS, path=os.path.join(OUTPUT_DIR, 'out_weighted.png'))
-        plot_weighted_plurality_improvement(
-            res, T_VALS, L_VALS,
-            path=os.path.join(OUTPUT_DIR, 'out_weighted_plurality_improvement.png')
-        )
-        plot_weighted_approval_improvement(
-            res, T_VALS, L_VALS,
-            path=os.path.join(OUTPUT_DIR, 'out_weighted_approval_improvement.png')
-        )
-        plot_weighted_overall_improvement(
-            res, T_VALS, L_VALS,
-            path=os.path.join(OUTPUT_DIR, 'out_weighted_overall_improvement.png')
-        )
-        plot_plurality_delta_heatmap(res, T_VALS, L_VALS, path=os.path.join(OUTPUT_DIR, 'out_plurality_delta_heatmap.png'))
-        plot_approval_delta_heatmap(res, T_VALS, L_VALS, path=os.path.join(OUTPUT_DIR, 'out_approval_delta_heatmap.png'))
-        plot_elapsed = time.time() - plot_t0
-        total_elapsed = time.time() - script_t0
+    plot_t0 = time.time()
+    plot_slices(res, T_VALS, L_VALS, path=os.path.join(OUTPUT_DIR, 'out_slices.png'))
+    plot_heatmaps(res, T_VALS, L_VALS, path=os.path.join(OUTPUT_DIR, 'out_heatmaps.png'))
+    plot_robustness(res, T_VALS, L_VALS, path=os.path.join(OUTPUT_DIR, 'out_robustness.png'))
+    plot_scenarios(res, T_VALS, L_VALS, path=os.path.join(OUTPUT_DIR, 'out_scenarios.png'))
+    plot_scenario_plurality_improvement(
+        res, T_VALS, L_VALS,
+        path=os.path.join(OUTPUT_DIR, 'out_scenario_plurality_improvement.png')
+    )
+    plot_scenario_approval_improvement(
+        res, T_VALS, L_VALS,
+        path=os.path.join(OUTPUT_DIR, 'out_scenario_approval_improvement.png')
+    )
+    plot_scenario_overall_improvement(
+        res, T_VALS, L_VALS,
+        path=os.path.join(OUTPUT_DIR, 'out_scenario_overall_improvement.png')
+    )
+    plot_approval_diff(res, T_VALS, L_VALS, path=os.path.join(OUTPUT_DIR, 'out_approval_diff.png'))
+    plot_weighted(res, T_VALS, L_VALS, path=os.path.join(OUTPUT_DIR, 'out_weighted.png'))
+    plot_weighted_plurality_improvement(
+        res, T_VALS, L_VALS,
+        path=os.path.join(OUTPUT_DIR, 'out_weighted_plurality_improvement.png')
+    )
+    plot_weighted_approval_improvement(
+        res, T_VALS, L_VALS,
+        path=os.path.join(OUTPUT_DIR, 'out_weighted_approval_improvement.png')
+    )
+    plot_weighted_overall_improvement(
+        res, T_VALS, L_VALS,
+        path=os.path.join(OUTPUT_DIR, 'out_weighted_overall_improvement.png')
+    )
+    plot_plurality_delta_heatmap(res, T_VALS, L_VALS, path=os.path.join(OUTPUT_DIR, 'out_plurality_delta_heatmap.png'))
+    plot_approval_delta_heatmap(res, T_VALS, L_VALS, path=os.path.join(OUTPUT_DIR, 'out_approval_delta_heatmap.png'))
+    plot_elapsed = time.time() - plot_t0
+    total_elapsed = time.time() - script_t0
 
-        total_grid_points = N_T * N_L
-        total_sims = total_grid_points * N_TRIALS
-        print(
-            'Timing summary: '
-            f'total {total_elapsed:.1f}s | simulation {sim_elapsed:.1f}s | plotting {plot_elapsed:.1f}s '
-            f'| avg/grid {sim_elapsed / total_grid_points:.3f}s '
-            f'| avg/simulation {sim_elapsed / total_sims:.6f}s'
-        )
+    total_grid_points = N_T * N_L
+    total_sims = total_grid_points * N_TRIALS
+    print(
+        'Timing summary: '
+        f'total {total_elapsed:.1f}s | simulation {sim_elapsed:.1f}s | plotting {plot_elapsed:.1f}s '
+        f'| avg/grid {sim_elapsed / total_grid_points:.3f}s '
+        f'| avg/simulation {sim_elapsed / total_sims:.6f}s'
+    )
 
-        surface_means = {m: float(res[m].mean()) for m in METHODS}
-        print('[FINAL] Overall surface means across all (t,l):')
-        print(f'  {_fmt_method_values(surface_means)}')
-        _print_ranked(surface_means, '  Final ranking by surface mean:')
+    _summary('')
+    _summary('RUN_TIMING')
+    _summary(
+        f'total={total_elapsed:.3f}s | simulation={sim_elapsed:.3f}s | plotting={plot_elapsed:.3f}s '
+        f'| avg_grid={sim_elapsed / total_grid_points:.6f}s | avg_sim={sim_elapsed / total_sims:.8f}s'
+    )
+    _summary(f'run_completed={datetime.now().isoformat(timespec="seconds")}')
+    _write_summary_log(summary_path)
+    print(f'Summary log saved: {summary_path}')
 
-        print('All plots saved.')
-        print(f'Run completed: {datetime.now().isoformat(timespec="seconds")}')
+    print('All plots saved.')
