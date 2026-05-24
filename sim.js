@@ -264,6 +264,194 @@ let simAborted = false;
 let isSimRunning = false;
 let lastSimResult = null;
 
+const HYPOTHESIS_ALPHA = 0.05;
+const HYPOTHESIS_PAIRS = [
+    ['Approval', 'Plurality'],
+    ['RCV', 'Plurality'],
+    ['Approval', 'RCV'],
+    ['STAR', 'Approval'],
+    ['Condorcet', 'Approval'],
+    ['Borda', 'Approval'],
+    ['Score', 'Approval'],
+];
+
+function erfApprox(x) {
+    const sign = x < 0 ? -1 : 1;
+    const ax = Math.abs(x);
+    const t = 1 / (1 + 0.3275911 * ax);
+    const a1 = 0.254829592;
+    const a2 = -0.284496736;
+    const a3 = 1.421413741;
+    const a4 = -1.453152027;
+    const a5 = 1.061405429;
+    const poly = (((((a5 * t + a4) * t) + a3) * t + a2) * t + a1) * t;
+    const y = 1 - poly * Math.exp(-ax * ax);
+    return sign * y;
+}
+
+function normalCdf(x) {
+    return 0.5 * (1 + erfApprox(x / Math.sqrt(2)));
+}
+
+function oneSidedMeanDiffTest(deltas) {
+    const n = deltas.length;
+    if (n < 2) {
+        return { mean: NaN, sd: NaN, se: NaN, z: NaN, p: NaN, lowerCi: NaN, nearZeroVar: true };
+    }
+
+    let sum = 0;
+    for (const d of deltas) sum += d;
+    const mean = sum / n;
+
+    let ss = 0;
+    for (const d of deltas) ss += (d - mean) ** 2;
+    const sd = Math.sqrt(ss / (n - 1));
+    const se = sd / Math.sqrt(n);
+
+    if (sd < 1e-12) {
+        return {
+            mean,
+            sd,
+            se,
+            z: mean > 0 ? Infinity : -Infinity,
+            p: mean > 0 ? 0 : 1,
+            lowerCi: mean,
+            nearZeroVar: true,
+        };
+    }
+
+    const z = mean / se;
+    const p = 1 - normalCdf(z);  // one-sided for H1: mean > 0
+    const zCrit = 1.6448536269514722;  // lower bound for one-sided 95%
+    const lowerCi = mean - zCrit * se;
+    return { mean, sd, se, z, p: Math.max(0, Math.min(1, p)), lowerCi, nearZeroVar: false };
+}
+
+function logChoose(n, k) {
+    if (k < 0 || k > n) return -Infinity;
+    if (k === 0 || k === n) return 0;
+    const kk = Math.min(k, n - k);
+    let out = 0;
+    for (let i = 1; i <= kk; i++) out += Math.log(n - kk + i) - Math.log(i);
+    return out;
+}
+
+function binomUpperTailHalf(n, kMin) {
+    if (kMin <= 0) return 1;
+    if (kMin > n) return 0;
+    let sum = 0;
+    const ln2 = Math.log(2);
+    for (let k = kMin; k <= n; k++) {
+        sum += Math.exp(logChoose(n, k) - n * ln2);
+    }
+    return Math.max(0, Math.min(1, sum));
+}
+
+function oneSidedSignTest(deltas) {
+    let pos = 0;
+    let neg = 0;
+    let ties = 0;
+    for (const d of deltas) {
+        if (Math.abs(d) < 1e-12) ties++;
+        else if (d > 0) pos++;
+        else neg++;
+    }
+    const nEff = pos + neg;
+    const p = nEff > 0 ? binomUpperTailHalf(nEff, pos) : 1;
+    return { pos, neg, ties, nEff, p };
+}
+
+function bonferroniAdjust(pvals) {
+    const m = pvals.length;
+    if (m === 0) return [];
+    return pvals.map(p => Math.min(1, p * m));
+}
+
+function analyzeHypotheses(trialVse, tVals, lVals, methods) {
+    if (!trialVse) return null;
+
+    const enabledPairs = HYPOTHESIS_PAIRS.filter(([x, y]) => methods[x] && methods[y]);
+    if (!enabledPairs.length) {
+        return {
+            alpha: HYPOTHESIS_ALPHA,
+            correction: 'bonferroni',
+            pairs: [],
+            perGridTests: 0,
+            perPair: {},
+        };
+    }
+
+    const ng = lVals.length;
+    const perPair = {};
+    const allMeanP = [];
+    const allSignP = [];
+    const refs = [];
+
+    for (const [x, y] of enabledPairs) {
+        const pooled = [];
+        const cells = [];
+        const meanPGrid = Array.from({ length: ng }, () => new Float64Array(ng));
+        const signPGrid = Array.from({ length: ng }, () => new Float64Array(ng));
+        const meanDeltaGrid = Array.from({ length: ng }, () => new Float64Array(ng));
+
+        for (let li = 0; li < ng; li++) {
+            for (let ti = 0; ti < ng; ti++) {
+                const xVals = trialVse[x][li][ti];
+                const yVals = trialVse[y][li][ti];
+                const deltas = new Float64Array(xVals.length);
+                for (let i = 0; i < xVals.length; i++) {
+                    deltas[i] = xVals[i] - yVals[i];
+                    pooled.push(deltas[i]);
+                }
+
+                const meanStats = oneSidedMeanDiffTest(deltas);
+                const signStats = oneSidedSignTest(deltas);
+
+                meanPGrid[li][ti] = meanStats.p;
+                signPGrid[li][ti] = signStats.p;
+                meanDeltaGrid[li][ti] = meanStats.mean;
+
+                allMeanP.push(meanStats.p);
+                allSignP.push(signStats.p);
+                refs.push({ pair: `${x}>${y}`, li, ti });
+                cells.push({ li, ti, t: tVals[ti], l: lVals[li], meanStats, signStats });
+            }
+        }
+
+        perPair[`${x}>${y}`] = {
+            x,
+            y,
+            cells,
+            meanPGrid,
+            signPGrid,
+            meanDeltaGrid,
+            pooledMean: oneSidedMeanDiffTest(pooled),
+            pooledSign: oneSidedSignTest(pooled),
+        };
+    }
+
+    const meanAdj = bonferroniAdjust(allMeanP);
+    const signAdj = bonferroniAdjust(allSignP);
+    for (let i = 0; i < refs.length; i++) {
+        const ref = refs[i];
+        const info = perPair[ref.pair];
+        if (!info.meanPAdjGrid) {
+            info.meanPAdjGrid = Array.from({ length: ng }, () => new Float64Array(ng));
+            info.signPAdjGrid = Array.from({ length: ng }, () => new Float64Array(ng));
+        }
+        info.meanPAdjGrid[ref.li][ref.ti] = meanAdj[i];
+        info.signPAdjGrid[ref.li][ref.ti] = signAdj[i];
+    }
+
+    return {
+        alpha: HYPOTHESIS_ALPHA,
+        correction: 'bonferroni',
+        pairs: enabledPairs,
+        perPair,
+        perGridTests: allMeanP.length,
+    };
+}
+
 async function runGrid(params, onProgress) {
     const { nv, nc, ntr, ng, nd, methods } = params;
     const methodNames = Object.keys(methods);
@@ -271,6 +459,12 @@ async function runGrid(params, onProgress) {
     const lVals = linspace(1 / nc, 1, ng);
     const res = {};
     for (const m of methodNames) res[m] = Array.from({ length: ng }, () => new Float64Array(ng));
+    const trialVse = {};
+    for (const m of methodNames) {
+        trialVse[m] = Array.from({ length: ng }, () =>
+            Array.from({ length: ng }, () => new Float64Array(ntr))
+        );
+    }
 
     simAborted = false;
     const total = ng * ng;
@@ -294,7 +488,9 @@ async function runGrid(params, onProgress) {
                 const swOpt = Math.max(...cm);
                 for (const [name, fn] of Object.entries(methods)) {
                     const w = fn(pu, l);
-                    acc[name] += vse(cm[w], swRand, swOpt);
+                    const vseVal = vse(cm[w], swRand, swOpt);
+                    acc[name] += vseVal;
+                    trialVse[name][li][ti][tr] = vseVal;
                 }
             }
 
@@ -309,7 +505,110 @@ async function runGrid(params, onProgress) {
             if (done % 4 === 0) await sleep(0);
         }
     }
-    return { res, tVals, lVals };
+    return { res, tVals, lVals, trialVse };
+}
+
+function fmtP(p) {
+    if (!Number.isFinite(p)) return 'NA';
+    if (p < 1e-4) return p.toExponential(2);
+    return p.toFixed(4);
+}
+
+function renderHypothesisTests(state) {
+    const summaryEl = document.getElementById('hypothesis-summary');
+    const tableWrap = document.getElementById('hypothesis-table-wrap');
+    const emptyEl = document.getElementById('hypothesis-empty');
+
+    if (!summaryEl || !tableWrap || !emptyEl) return;
+
+    const analysis = analyzeHypotheses(state.trialVse, state.tVals, state.lVals, state.methods);
+    if (!analysis || analysis.pairs.length === 0) {
+        tableWrap.innerHTML = '';
+        summaryEl.textContent = '';
+        emptyEl.style.display = 'block';
+        emptyEl.textContent = 'Enable method combinations matching at least one configured hypothesis pair to see statistical test results.';
+        return;
+    }
+
+    emptyEl.style.display = 'none';
+    summaryEl.textContent = `Alpha = ${analysis.alpha.toFixed(2)}. Per-grid family: ${analysis.perGridTests} tests (${analysis.correction}). Read pooled p-values as the overall answer, and Bonferroni-adjusted per-grid counts as strict local evidence.`;
+
+    const rows = [];
+    for (const [x, y] of analysis.pairs) {
+        const key = `${x}>${y}`;
+        const info = analysis.perPair[key];
+        const ng = state.tVals.length;
+        let sigMeanAdj = 0;
+        let sigSignAdj = 0;
+        let sigMeanNom = 0;
+        for (let li = 0; li < ng; li++) {
+            for (let ti = 0; ti < ng; ti++) {
+                if (info.meanPGrid[li][ti] < analysis.alpha) sigMeanNom++;
+                if (info.meanPAdjGrid[li][ti] < analysis.alpha) sigMeanAdj++;
+                if (info.signPAdjGrid[li][ti] < analysis.alpha) sigSignAdj++;
+            }
+        }
+
+        const pooledMeanDelta = info.pooledMean.mean;
+        const pooledMeanSig = info.pooledMean.p < analysis.alpha;
+        const pooledSignSig = info.pooledSign.p < analysis.alpha;
+
+        let takeaway = 'No clear evidence for X > Y';
+        let takeawayClass = 'sig-no';
+        if (pooledMeanDelta > 0 && pooledMeanSig && pooledSignSig && sigMeanAdj > 0) {
+            takeaway = 'Evidence supports X > Y';
+            takeawayClass = 'sig-yes';
+        } else if (pooledMeanDelta > 0 && (pooledMeanSig || pooledSignSig || sigMeanAdj > 0)) {
+            takeaway = 'Mixed or weak evidence';
+            takeawayClass = 'sig-mixed';
+        }
+
+        rows.push({
+            label: `${x} > ${y}`,
+            pooledMeanDelta,
+            pooledMeanP: info.pooledMean.p,
+            pooledSignP: info.pooledSign.p,
+            pooledMeanSig,
+            pooledSignSig,
+            sigMeanNom,
+            sigMeanAdj,
+            sigSignAdj,
+            totalCells: ng * ng,
+            takeaway,
+            takeawayClass,
+        });
+    }
+
+    tableWrap.innerHTML = `
+        <table class="result-table">
+            <thead>
+                <tr>
+                    <th>Hypothesis</th>
+                    <th>Pooled mean Δ</th>
+                    <th>Pooled p (mean-diff)</th>
+                    <th>Pooled p (sign test)</th>
+                    <th>Per-grid nominal sig</th>
+                    <th>Per-grid Bonf sig (mean-diff)</th>
+                    <th>Per-grid Bonf sig (sign)</th>
+                    <th>Lay takeaway</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${rows.map(r => `
+                    <tr>
+                        <td>${r.label}</td>
+                        <td>${Number.isFinite(r.pooledMeanDelta) ? r.pooledMeanDelta.toFixed(5) : 'NA'}</td>
+                        <td class="${r.pooledMeanSig ? 'sig-yes' : 'sig-no'}">${fmtP(r.pooledMeanP)}</td>
+                        <td class="${r.pooledSignSig ? 'sig-yes' : 'sig-no'}">${fmtP(r.pooledSignP)}</td>
+                        <td>${r.sigMeanNom}/${r.totalCells}</td>
+                        <td>${r.sigMeanAdj}/${r.totalCells}</td>
+                        <td>${r.sigSignAdj}/${r.totalCells}</td>
+                        <td class="${r.takeawayClass}">${r.takeaway}</td>
+                    </tr>
+                `).join('')}
+            </tbody>
+        </table>
+    `;
 }
 
 function linspace(a, b, n) {
@@ -1146,6 +1445,7 @@ function renderChartsFromState(state) {
     plotWeighted(res, tVals, lVals, methods);
     plotWeightedOverallImprovement(res, tVals, lVals, methods);
     plotScenarioOverallImprovement(res, tVals, lVals, methods);
+    renderHypothesisTests(state);
     plotApprovalDiff(res, tVals, lVals, methods);
     updateStarLegendVisibility();
 }
@@ -1256,12 +1556,12 @@ document.getElementById('run-btn').addEventListener('click', async () => {
             return;
         }
 
-        const { res, tVals, lVals } = result;
+        const { res, tVals, lVals, trialVse } = result;
 
         statusEl.textContent = 'Rendering plots…';
         await sleep(0);
 
-        lastSimResult = { res, tVals, lVals, methods: params.methods };
+        lastSimResult = { res, tVals, lVals, trialVse, methods: params.methods };
         renderChartsFromState(lastSimResult);
 
         document.getElementById('results').style.display = 'block';

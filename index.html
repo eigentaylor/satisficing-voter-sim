@@ -140,6 +140,7 @@
                 <button class="tab-btn" data-tab="scenario-overall">Scenario Improvement</button>
                 <button class="tab-btn" data-tab="weighted">Weighted VSE</button>
                 <button class="tab-btn" data-tab="weighted-overall">Weighted Improvement</button>
+                <button class="tab-btn" data-tab="hypothesis-tests">Hypothesis Tests</button>
                 <button class="tab-btn" data-tab="approval-diff">Approval Δ</button>
             </div>
 
@@ -232,6 +233,29 @@
                     <div class="chart-wrap"><canvas id="chart-wo-5"></canvas></div>
                     <div class="chart-wrap"><canvas id="chart-wo-6"></canvas></div>
                 </div>
+            </div>
+
+            <!-- Hypothesis tests -->
+            <div class="tab-pane" id="tab-hypothesis-tests">
+                <p class="chart-desc">
+                    One-sided paired tests for claims of the form <strong>X &gt; Y</strong> using per-trial differences
+                    $d_i = \mathrm{VSE}(X,i)-\mathrm{VSE}(Y,i)$.
+                </p>
+                <div class="note-box">
+                    <p><strong>How to read this (plain language):</strong></p>
+                    <ul>
+                        <li><strong>Hypothesis X &gt; Y</strong> means: "is there evidence that method X is better than method Y?"</li>
+                        <li><strong>Pooled p-values</strong> summarize the whole simulation in one number per hypothesis.</li>
+                        <li><strong>Per-grid nominal sig</strong> counts cells significant before multiple-testing correction.</li>
+                        <li><strong>Per-grid Bonf sig</strong> is stricter and controls false positives across all pair-cell tests.</li>
+                        <li><strong>Practical rule:</strong> trust Bonferroni-adjusted counts more than nominal counts for cell-level claims.</li>
+                        <li><strong>Important:</strong> a small p-value is evidence, not proof, and does not by itself measure effect size.</li>
+                        <li><strong>Method note:</strong> mean-difference p-values use a normal approximation in-browser; the sign test is an exact binomial sensitivity check.</li>
+                    </ul>
+                </div>
+                <p id="hypothesis-empty" class="chart-desc" style="display:none"></p>
+                <div id="hypothesis-summary" class="hypothesis-summary"></div>
+                <div id="hypothesis-table-wrap" class="table-wrap"></div>
             </div>
 
             <!-- Approval diff -->

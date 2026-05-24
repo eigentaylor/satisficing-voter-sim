@@ -193,3 +193,58 @@ Each grid point is an independent Monte Carlo average. The noise vector $\eta_i$
 **The Borda truncation convention matters.** Truncated Borda assigns points $K, K-1, \ldots, 1$ to ranked candidates and $0$ to unranked ones, compressing the point scale with energy level. This is one defensible convention among several; results for Borda should be interpreted with this in mind.
 
 **The approval threshold is fixed at the personal mean.** We approve candidates above $\bar{\tilde{u}}_i$, the voter's mean perceived utility across all candidates. This is the standard honest approval strategy in VSE literature and has a clean decision-theoretic interpretation (approve anything better than average), but it is not the uniquely correct threshold. Results for approval are specific to this threshold choice.
+
+---
+
+## Paired Hypothesis Testing (New)
+
+The simulation now includes per-trial paired-difference hypothesis tests for directional claims of the form $X > Y$.
+
+For each trial $i$ at each grid point $(t, \ell)$, it computes
+
+$$
+d_i(X,Y)=\mathrm{VSE}(X, i)-\mathrm{VSE}(Y, i)
+$$
+
+and tests whether there is evidence that the underlying mean difference is positive:
+
+$$
+H_0: \mu_d \le 0 \quad \text{vs} \quad H_1: \mu_d > 0
+$$
+
+### Hypotheses currently tested
+
+- Approval > Plurality
+- RCV > Plurality
+- Approval > RCV
+- STAR > Approval
+- Condorcet > Approval
+- Borda > Approval
+- Score > Approval
+
+### Statistical procedure
+
+- Primary test: one-sided paired t-test on $d_i$.
+- Sensitivity test: one-sided Wilcoxon signed-rank test on $d_i$.
+- Per-grid multiplicity control: Bonferroni correction over all per-grid tests (100 grid cells x 7 hypotheses = 700 tests).
+- Pooled reporting: one pooled test per hypothesis across all grid-trial observations (reported separately from per-grid families).
+
+### Output
+
+- Console: pooled mean $\Delta$, pooled p-values, and counts of Bonferroni-significant grid cells.
+- Summary log (`output/logs/summary_<timestamp>.txt`): pooled statistics, corrected per-grid significance counts, and strongest/weakest grid regions by adjusted t-test p-value.
+
+### Running
+
+Install dependencies and run as usual:
+
+```bash
+pip install -r requirements.txt
+python satisficing_sim_1.py
+```
+
+Paired testing is controlled in `satisficing_sim_1.py` with:
+
+- `RUN_PAIRED_HYPOTHESIS_TESTS`
+- `HYPOTHESIS_ALPHA`
+- `HYPOTHESIS_PAIRS`

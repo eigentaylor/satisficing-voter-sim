@@ -460,6 +460,80 @@ input[type="range"]::-webkit-slider-thumb:hover {
     margin-bottom: 1rem;
 }
 
+.note-box {
+    background: var(--panel2);
+    border: 1px solid #2d3f45;
+    border-radius: 8px;
+    padding: 0.8rem 0.95rem;
+    margin-bottom: 1rem;
+}
+
+.note-box p {
+    color: var(--text);
+    font-size: 0.9rem;
+    margin-bottom: 0.35rem;
+}
+
+.note-box ul {
+    color: var(--muted);
+    padding-left: 1.1rem;
+    line-height: 1.55;
+    font-size: 0.86rem;
+}
+
+.hypothesis-summary {
+    color: var(--muted);
+    font-size: 0.86rem;
+    margin-bottom: 0.75rem;
+}
+
+.table-wrap {
+    overflow-x: auto;
+}
+
+.result-table {
+    width: 100%;
+    border-collapse: collapse;
+    min-width: 760px;
+    background: var(--panel2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+}
+
+.result-table th,
+.result-table td {
+    border-bottom: 1px solid var(--border);
+    padding: 0.5rem 0.55rem;
+    text-align: left;
+    font-size: 0.83rem;
+    white-space: nowrap;
+}
+
+.result-table th {
+    color: var(--text);
+    background: #1a1a1a;
+    font-weight: 600;
+}
+
+.result-table td {
+    color: var(--muted);
+}
+
+.sig-yes {
+    color: #7fe39a !important;
+    font-weight: 600;
+}
+
+.sig-no {
+    color: #e08787 !important;
+    font-weight: 600;
+}
+
+.sig-mixed {
+    color: #e5c96e !important;
+    font-weight: 600;
+}
+
 .star-legend {
     color: #f0cf66;
     font-weight: 600;

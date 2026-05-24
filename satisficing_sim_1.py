@@ -14,11 +14,13 @@ Code written by Anthropic's Claude, slightly modified by me
 import numpy as np
 import os
 from datetime import datetime
+from typing import Any
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
 import warnings, time
+from scipy.stats import ttest_1samp, wilcoxon, t as student_t
 warnings.filterwarnings('ignore')
 
 rng = np.random.default_rng(42)
@@ -35,6 +37,18 @@ T_VALS = np.linspace(0.0, 1.0, N_T)
 L_VALS = np.linspace(1/N_CANDS, 1.0, N_L)   # min = consider 1 candidate
 OUTPUT_DIR = 'output/plots'
 LOG_DIR = 'output/logs'
+
+RUN_PAIRED_HYPOTHESIS_TESTS = True
+HYPOTHESIS_ALPHA = 0.05
+HYPOTHESIS_PAIRS = [
+    ('Approval', 'Plurality'),
+    ('RCV', 'Plurality'),
+    ('Approval', 'RCV'),
+    ('STAR', 'Approval'),
+    ('Condorcet', 'Approval'),
+    ('Borda', 'Approval'),
+    ('Score', 'Approval'),
+]
 
 SUMMARY_LINES = []
 
@@ -73,6 +87,135 @@ def _write_summary_log(path):
     os.makedirs(os.path.dirname(path), exist_ok=True)
     with open(path, 'w', encoding='utf-8') as f:
         f.write('\n'.join(SUMMARY_LINES) + '\n')
+
+
+def _write_pvalue_log(path, test_res, run_stamp):
+    """Write dedicated hypothesis-test p-value output file."""
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    alpha = test_res['alpha']
+    correction = test_res['correction']
+    tests_total = test_res['tests_per_family']
+    t_vals = test_res['t_vals']
+    l_vals = test_res['l_vals']
+
+    lines = []
+    lines.append('Satisficing Voter Simulation - Paired Hypothesis P-Values')
+    lines.append(f'run_stamp={run_stamp}')
+    lines.append(
+        f'alpha={alpha:.6f} | correction={correction} | per_grid_tests={tests_total}'
+    )
+    lines.append(
+        'interpretation_note=Per-grid adjusted p-values are Bonferroni-corrected over all pair-cell tests; '
+        'pooled tests are reported separately and aggregate across all grid-trial observations.'
+    )
+    lines.append('')
+    lines.append('[POOLED_RESULTS]')
+    lines.append(
+        'pair\tmean_delta\tt_stat\tt_p\tt_ci_lower\tw_stat\tw_p\tties\tt_sig_nominal\tw_sig_nominal'
+    )
+
+    for mx, my in test_res['pairs']:
+        pooled = test_res['pooled'][(mx, my)]
+        pooled_t = pooled['t']
+        pooled_w = pooled['w']
+        lines.append(
+            f'{mx}>{my}\t{pooled_t["mean"]:.10f}\t{pooled_t["t"]:.10f}\t{pooled_t["p"]:.10e}'
+            f'\t{pooled_t["lower_ci"]:.10f}\t{pooled_w["w"]:.10f}\t{pooled_w["p"]:.10e}'
+            f'\t{pooled_w["ties"]}\t{int(pooled_t["p"] < alpha)}\t{int(pooled_w["p"] < alpha)}'
+        )
+
+    lines.append('')
+    lines.append('[PER_GRID_RESULTS]')
+    lines.append(
+        'pair\tt\tl\tmean_delta\tt_stat\tt_p\tt_p_adj\tt_sig_nominal\tt_sig_adj'
+        '\tw_stat\tw_p\tw_p_adj\tw_sig_nominal\tw_sig_adj\tties\tnear_zero_var'
+    )
+
+    for mx, my in test_res['pairs']:
+        pg = test_res['per_grid'][(mx, my)]
+        for li in range(len(l_vals)):
+            for ti in range(len(t_vals)):
+                t_p = float(pg['t_p'][li, ti])
+                w_p = float(pg['w_p'][li, ti])
+                t_adj = float(pg['t_p_adj'][li, ti])
+                w_adj = float(pg['w_p_adj'][li, ti])
+                lines.append(
+                    f'{mx}>{my}\t{t_vals[ti]:.6f}\t{l_vals[li]:.6f}'
+                    f'\t{pg["mean_delta"][li, ti]:.10f}\t{pg["t_stat"][li, ti]:.10f}'
+                    f'\t{t_p:.10e}\t{t_adj:.10e}\t{int(t_p < alpha)}\t{int(t_adj < alpha)}'
+                    f'\t{pg["w_stat"][li, ti]:.10f}\t{w_p:.10e}\t{w_adj:.10e}'
+                    f'\t{int(w_p < alpha)}\t{int(w_adj < alpha)}'
+                    f'\t{int(pg["ties"][li, ti])}\t{int(pg["near_zero_var"][li, ti])}'
+                )
+
+    with open(path, 'w', encoding='utf-8') as f:
+        f.write('\n'.join(lines) + '\n')
+
+
+def _write_hypothesis_decision_log(path, test_res, run_stamp):
+    """Write a lay-readable hypothesis decision report at the configured alpha."""
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+
+    alpha = test_res['alpha']
+    correction = test_res['correction']
+    tests_total = test_res['tests_per_family']
+
+    lines = []
+    lines.append('Satisficing Voter Simulation - Hypothesis Decisions')
+    lines.append(f'run_stamp={run_stamp}')
+    lines.append(
+        f'alpha={alpha:.6f} | correction={correction} | per_grid_tests={tests_total}'
+    )
+    lines.append('')
+    lines.append('INTERPRETATION')
+    lines.append('- Pooled tests ask whether X tends to beat Y overall across all grid-trial observations.')
+    lines.append('- Per-grid adjusted counts use Bonferroni correction and are strict cell-level evidence.')
+    lines.append('- A significant p-value indicates statistical evidence, not proof or practical importance by itself.')
+    lines.append('')
+    lines.append('HYPOTHESIS_ANSWERS')
+
+    for mx, my in test_res['pairs']:
+        pg = test_res['per_grid'][(mx, my)]
+        pooled_t = test_res['pooled'][(mx, my)]['t']
+        pooled_w = test_res['pooled'][(mx, my)]['w']
+
+        pooled_mean_delta = float(pooled_t['mean'])
+        pooled_t_p = float(pooled_t['p'])
+        pooled_w_p = float(pooled_w['p'])
+        pooled_t_sig = pooled_t_p < alpha
+        pooled_w_sig = pooled_w_p < alpha
+        grid_t_sig = int(pg['t_sig_adj'].sum())
+        grid_w_sig = int(pg['w_sig_adj'].sum())
+        grid_total = int(pg['t_sig_adj'].size)
+
+        if pooled_mean_delta <= 0:
+            verdict = 'NO_CLEAR_EVIDENCE'
+            plain = f'No evidence that {mx} is better than {my} overall.'
+        elif pooled_t_sig and pooled_w_sig and grid_t_sig > 0:
+            verdict = 'SUPPORTED'
+            plain = f'Evidence supports that {mx} tends to outperform {my}.'
+        elif pooled_t_sig or pooled_w_sig or grid_t_sig > 0:
+            verdict = 'MIXED_OR_WEAK'
+            plain = f'Results are mixed/weak for {mx} being better than {my}.'
+        else:
+            verdict = 'NO_CLEAR_EVIDENCE'
+            plain = f'No clear evidence that {mx} is better than {my}.'
+
+        lines.append(f'- Hypothesis: {mx} > {my}')
+        lines.append(f'  verdict={verdict}')
+        lines.append(f'  plain_language={plain}')
+        lines.append(
+            f'  pooled_mean_delta={pooled_mean_delta:.6f} | pooled_t_p={pooled_t_p:.6e} | '
+            f'pooled_w_p={pooled_w_p:.6e}'
+        )
+        lines.append(
+            f'  per_grid_sig_t_adj={grid_t_sig}/{grid_total} | '
+            f'per_grid_sig_w_adj={grid_w_sig}/{grid_total}'
+        )
+        lines.append('')
+
+    with open(path, 'w', encoding='utf-8') as f:
+        f.write('\n'.join(lines) + '\n')
 
 # ── core utilities ────────────────────────────────────────────────────────────
 
@@ -233,11 +376,257 @@ def build_methods():
 
 METHODS = build_methods()
 
+
+def _one_sided_ttest_greater(deltas):
+    """One-sided paired t-test for H1: mean(deltas) > 0 with safeguards."""
+    deltas = np.asarray(deltas, dtype=float)
+    n = deltas.size
+    mean_d = float(deltas.mean())
+    sd = float(deltas.std(ddof=1)) if n > 1 else 0.0
+    se = sd / np.sqrt(n) if n > 0 else np.nan
+
+    if n < 2:
+        return {
+            'n': int(n),
+            'mean': mean_d,
+            'sd': sd,
+            'se': se,
+            't': np.nan,
+            'p': np.nan,
+            'lower_ci': np.nan,
+            'near_zero_var': True,
+        }
+
+    near_zero_var = sd < 1e-12
+    if near_zero_var:
+        t_stat = np.inf if mean_d > 0 else -np.inf
+        p_val = 0.0 if mean_d > 0 else 1.0
+        lower_ci = mean_d
+    else:
+        ttest_out: Any = ttest_1samp(deltas, popmean=0.0)
+        t_stat = float(ttest_out.statistic)
+        p_two_sided = float(ttest_out.pvalue)
+        p_val = p_two_sided / 2 if t_stat > 0 else 1 - p_two_sided / 2
+        tcrit = float(student_t.ppf(1 - HYPOTHESIS_ALPHA, n - 1))
+        lower_ci = mean_d - tcrit * se
+
+    return {
+        'n': int(n),
+        'mean': mean_d,
+        'sd': sd,
+        'se': se,
+        't': t_stat,
+        'p': float(np.clip(p_val, 0.0, 1.0)),
+        'lower_ci': float(lower_ci),
+        'near_zero_var': near_zero_var,
+    }
+
+
+def _one_sided_wilcoxon_greater(deltas):
+    """One-sided Wilcoxon signed-rank test for H1: median(deltas) > 0."""
+    deltas = np.asarray(deltas, dtype=float)
+    ties = int(np.sum(np.isclose(deltas, 0.0)))
+    non_zero = int(deltas.size - ties)
+
+    if non_zero == 0:
+        return {
+            'w': np.nan,
+            'p': 1.0,
+            'ties': ties,
+            'non_zero': non_zero,
+        }
+
+    try:
+        w_out: Any = wilcoxon(deltas, alternative='greater', zero_method='wilcox')
+        w_stat = float(w_out.statistic)
+        p_val = float(w_out.pvalue)
+    except ValueError:
+        w_stat = np.nan
+        p_val = 1.0
+
+    return {
+        'w': w_stat,
+        'p': float(np.clip(p_val, 0.0, 1.0)),
+        'ties': ties,
+        'non_zero': non_zero,
+    }
+
+
+def _bonferroni_adjust(pvals):
+    pvals = np.asarray(pvals, dtype=float)
+    m = int(pvals.size)
+    if m == 0:
+        return pvals
+    adjusted = np.minimum(1.0, pvals * m)
+    return adjusted
+
+
+def analyze_pairwise_hypotheses(trial_vse, tv, lv, pairs, alpha=HYPOTHESIS_ALPHA):
+    """Analyze X>Y hypotheses from per-trial VSE arrays."""
+    first_method = next(iter(trial_vse))
+    nl, nt, _ = trial_vse[first_method].shape
+
+    per_grid = {}
+    pooled = {}
+
+    all_t_pvals = []
+    all_w_pvals = []
+    grid_refs = []
+
+    for mx, my in pairs:
+        deltas = trial_vse[mx] - trial_vse[my]   # (nl, nt, ntr)
+        t_p_grid = np.zeros((nl, nt), dtype=float)
+        w_p_grid = np.zeros((nl, nt), dtype=float)
+        mean_grid = np.zeros((nl, nt), dtype=float)
+        lower_ci_grid = np.zeros((nl, nt), dtype=float)
+        t_stat_grid = np.zeros((nl, nt), dtype=float)
+        w_stat_grid = np.zeros((nl, nt), dtype=float)
+        ties_grid = np.zeros((nl, nt), dtype=int)
+        nzv_grid = np.zeros((nl, nt), dtype=bool)
+
+        for li in range(nl):
+            for ti in range(nt):
+                d = deltas[li, ti, :]
+                t_stats = _one_sided_ttest_greater(d)
+                w_stats = _one_sided_wilcoxon_greater(d)
+
+                t_p_grid[li, ti] = t_stats['p']
+                w_p_grid[li, ti] = w_stats['p']
+                mean_grid[li, ti] = t_stats['mean']
+                lower_ci_grid[li, ti] = t_stats['lower_ci']
+                t_stat_grid[li, ti] = t_stats['t']
+                w_stat_grid[li, ti] = w_stats['w']
+                ties_grid[li, ti] = w_stats['ties']
+                nzv_grid[li, ti] = t_stats['near_zero_var']
+
+                all_t_pvals.append(t_stats['p'])
+                all_w_pvals.append(w_stats['p'])
+                grid_refs.append((mx, my, li, ti))
+
+        pooled_d = deltas.reshape(-1)
+        pooled_t = _one_sided_ttest_greater(pooled_d)
+        pooled_w = _one_sided_wilcoxon_greater(pooled_d)
+
+        per_grid[(mx, my)] = {
+            'mean_delta': mean_grid,
+            'lower_ci': lower_ci_grid,
+            't_stat': t_stat_grid,
+            't_p': t_p_grid,
+            'w_stat': w_stat_grid,
+            'w_p': w_p_grid,
+            'ties': ties_grid,
+            'near_zero_var': nzv_grid,
+        }
+        pooled[(mx, my)] = {
+            't': pooled_t,
+            'w': pooled_w,
+        }
+
+    t_adj_flat = _bonferroni_adjust(np.array(all_t_pvals, dtype=float))
+    w_adj_flat = _bonferroni_adjust(np.array(all_w_pvals, dtype=float))
+
+    for idx, (mx, my, li, ti) in enumerate(grid_refs):
+        pair_data = per_grid[(mx, my)]
+        if 't_p_adj' not in pair_data:
+            pair_data['t_p_adj'] = np.zeros((nl, nt), dtype=float)
+            pair_data['w_p_adj'] = np.zeros((nl, nt), dtype=float)
+            pair_data['t_sig_adj'] = np.zeros((nl, nt), dtype=bool)
+            pair_data['w_sig_adj'] = np.zeros((nl, nt), dtype=bool)
+        pair_data['t_p_adj'][li, ti] = t_adj_flat[idx]
+        pair_data['w_p_adj'][li, ti] = w_adj_flat[idx]
+        pair_data['t_sig_adj'][li, ti] = t_adj_flat[idx] < alpha
+        pair_data['w_sig_adj'][li, ti] = w_adj_flat[idx] < alpha
+
+    return {
+        'alpha': alpha,
+        'correction': 'bonferroni',
+        'pairs': pairs,
+        'per_grid': per_grid,
+        'pooled': pooled,
+        't_vals': np.array(tv, dtype=float),
+        'l_vals': np.array(lv, dtype=float),
+        'tests_per_family': len(all_t_pvals),
+    }
+
+
+def report_pairwise_hypotheses(test_res):
+    """Print and summarize paired hypothesis test results."""
+    alpha = test_res['alpha']
+    tests_total = test_res['tests_per_family']
+
+    print('\nPaired hypothesis tests (one-sided: X > Y)')
+    print(
+        f"  correction={test_res['correction']} | alpha={alpha:.3f}"
+        f" | per-grid tests={tests_total}"
+    )
+
+    _summary('')
+    _summary('PAIRED_HYPOTHESIS_TESTS')
+    _summary(
+        f"alpha={alpha:.4f} | correction={test_res['correction']}"
+        f" | per_grid_tests={tests_total}"
+    )
+
+    for mx, my in test_res['pairs']:
+        pg = test_res['per_grid'][(mx, my)]
+        pooled = test_res['pooled'][(mx, my)]
+        pooled_t = pooled['t']
+        pooled_w = pooled['w']
+
+        sig_t_count = int(pg['t_sig_adj'].sum())
+        sig_w_count = int(pg['w_sig_adj'].sum())
+        disagree_count = int((pg['t_sig_adj'] != pg['w_sig_adj']).sum())
+        nzv_count = int(pg['near_zero_var'].sum())
+
+        print(
+            f"  {mx} > {my}: pooled mean Δ={pooled_t['mean']:.5f}"
+            f" | t p={pooled_t['p']:.3e}"
+            f" | wilcoxon p={pooled_w['p']:.3e}"
+            f" | per-grid sig (t/w)={sig_t_count}/{sig_w_count}"
+        )
+
+        _summary(
+            f"PAIRED_POOL | {mx}>{my} | mean_delta={pooled_t['mean']:.6f}"
+            f" | t={pooled_t['t']:.4f} | t_p={pooled_t['p']:.6e}"
+            f" | t_ci_lower={pooled_t['lower_ci']:.6f}"
+            f" | w={pooled_w['w']:.4f} | w_p={pooled_w['p']:.6e}"
+            f" | ties={pooled_w['ties']}"
+        )
+        _summary(
+            f"PAIRED_GRID_COUNTS | {mx}>{my}"
+            f" | t_sig_adj={sig_t_count}"
+            f" | w_sig_adj={sig_w_count}"
+            f" | disagree={disagree_count}"
+            f" | near_zero_var={nzv_count}"
+        )
+
+        t_adj = pg['t_p_adj']
+        best_idx = np.unravel_index(np.argmin(t_adj), t_adj.shape)
+        worst_idx = np.unravel_index(np.argmax(t_adj), t_adj.shape)
+        best_li, best_ti = int(best_idx[0]), int(best_idx[1])
+        worst_li, worst_ti = int(worst_idx[0]), int(worst_idx[1])
+
+        _summary(
+            f"PAIRED_GRID_EXTREMES | {mx}>{my}"
+            f" | best_t={test_res['t_vals'][best_ti]:.3f}"
+            f" | best_l={test_res['l_vals'][best_li]:.3f}"
+            f" | best_mean_delta={pg['mean_delta'][best_li, best_ti]:.6f}"
+            f" | best_t_p_adj={pg['t_p_adj'][best_li, best_ti]:.6e}"
+            f" | worst_t={test_res['t_vals'][worst_ti]:.3f}"
+            f" | worst_l={test_res['l_vals'][worst_li]:.3f}"
+            f" | worst_mean_delta={pg['mean_delta'][worst_li, worst_ti]:.6f}"
+            f" | worst_t_p_adj={pg['t_p_adj'][worst_li, worst_ti]:.6e}"
+        )
+
 # ── simulation grid ───────────────────────────────────────────────────────────
 
-def run_grid(t_vals, l_vals, nv=N_VOTERS, nc=N_CANDS, ntr=N_TRIALS):
+def run_grid(t_vals, l_vals, nv=N_VOTERS, nc=N_CANDS, ntr=N_TRIALS,
+             return_trial_vse=False):
     nt, nl = len(t_vals), len(l_vals)
     res = {m: np.zeros((nl, nt)) for m in METHODS}
+    trial_vse = None
+    if return_trial_vse:
+        trial_vse = {m: np.zeros((nl, nt, ntr), dtype=float) for m in METHODS}
     total = nt * nl
     done  = 0
     grid_t0 = time.time()
@@ -246,14 +635,17 @@ def run_grid(t_vals, l_vals, nv=N_VOTERS, nc=N_CANDS, ntr=N_TRIALS):
     for ti, t in enumerate(t_vals):
         for li, l in enumerate(l_vals):
             acc = {m: 0.0 for m in METHODS}
-            for _ in range(ntr):
+            for tri in range(ntr):
                 u  = make_election(nv, nc)
                 pu = add_noise(u, t)
                 sw_r = u.mean()
                 sw_o = u.mean(axis=0).max()
                 for name, fn in METHODS.items():
                     w = fn(pu, l)
-                    acc[name] += vse(u[:, w].mean(), sw_r, sw_o)
+                    vse_val = vse(u[:, w].mean(), sw_r, sw_o)
+                    acc[name] += vse_val
+                    if trial_vse is not None:
+                        trial_vse[name][li, ti, tri] = vse_val
             for name in METHODS:
                 res[name][li, ti] = acc[name] / ntr
             done += 1
@@ -273,7 +665,7 @@ def run_grid(t_vals, l_vals, nv=N_VOTERS, nc=N_CANDS, ntr=N_TRIALS):
                     f" | sims {sims_done}/{total_sims}"
                 )
 
-    return res
+    return res, trial_vse
 
 # ── plotting helpers ──────────────────────────────────────────────────────────
 
@@ -976,6 +1368,8 @@ if __name__ == '__main__':
 
     run_stamp = datetime.now().strftime('%Y%m%d_%H%M%S')
     summary_path = os.path.join(LOG_DIR, f'summary_{run_stamp}.txt')
+    pvalues_path = os.path.join(LOG_DIR, f'pvalues_{run_stamp}.txt')
+    hypothesis_path = os.path.join(LOG_DIR, f'hypothesis_decisions_{run_stamp}.txt')
 
     SUMMARY_LINES.clear()
     _summary('Satisficing Voter Simulation Summary')
@@ -983,8 +1377,28 @@ if __name__ == '__main__':
     _summary(f'grid={N_T}x{N_L} | trials={N_TRIALS} | voters={N_VOTERS} | candidates={N_CANDS}')
     _summary('')
     t0 = time.time()
-    res = run_grid(T_VALS, L_VALS)
+    res, trial_vse = run_grid(
+        T_VALS,
+        L_VALS,
+        return_trial_vse=RUN_PAIRED_HYPOTHESIS_TESTS,
+    )
     sim_elapsed = time.time() - t0
+
+    if RUN_PAIRED_HYPOTHESIS_TESTS and trial_vse is not None:
+        print('Running paired-difference hypothesis tests...')
+        test_results = analyze_pairwise_hypotheses(
+            trial_vse,
+            T_VALS,
+            L_VALS,
+            HYPOTHESIS_PAIRS,
+            alpha=HYPOTHESIS_ALPHA,
+        )
+        report_pairwise_hypotheses(test_results)
+        _write_pvalue_log(pvalues_path, test_results, run_stamp)
+        _write_hypothesis_decision_log(hypothesis_path, test_results, run_stamp)
+        print(f'P-value log saved: {pvalues_path}')
+        print(f'Hypothesis decision log saved: {hypothesis_path}')
+
     print(f'Simulation done in {sim_elapsed:.1f}s\nGenerating plots...')
 
     plot_t0 = time.time()
