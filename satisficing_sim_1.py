@@ -123,7 +123,7 @@ def global_score_ballots(pu, l):
     flat  = (denom < 1e-9).squeeze(axis=1)  # voters where lo == hi
     denom[denom < 1e-9] = 1.0
     scaled = 5 * (pu - lo) / denom
-    scaled[flat] = 5.0                       # give max score to all candidates
+    scaled[flat] = 5.0                       # when utilities are flat, give max score to all candidates
 
     ballots = np.zeros((nv, nc))
     np.put_along_axis(ballots, tidx, np.take_along_axis(scaled, tidx, axis=1), axis=1)
