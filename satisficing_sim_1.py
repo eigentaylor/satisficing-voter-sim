@@ -975,7 +975,7 @@ if __name__ == '__main__':
     os.makedirs(LOG_DIR, exist_ok=True)
 
     run_stamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-    summary_path = os.path.join(LOG_DIR, f'summary_{run_stamp}.log')
+    summary_path = os.path.join(LOG_DIR, f'summary_{run_stamp}.txt')
 
     SUMMARY_LINES.clear()
     _summary('Satisficing Voter Simulation Summary')
