@@ -27,12 +27,12 @@ function randn() {
 // ── Color palette ─────────────────────────────────────────────────────────────
 const METHOD_COLORS = {
     Plurality: '#e05555',
-    RCV: '#e09944',
-    Borda: '#d4c94a',
-    Score: '#b8e04a',
     Approval: '#4ec96a',
+    RCV: '#e09944',
     STAR: '#4ab8e0',
     Condorcet: '#9b6be0',
+    Score: '#b8e04a',
+    Borda: '#d4c94a',
 };
 
 // ── Core simulation utilities ─────────────────────────────────────────────────
@@ -246,12 +246,12 @@ function irv(pu, l) {
 function buildMethods(enabled) {
     const all = {
         Plurality: (pu, l) => plurality(pu),
-        RCV: (pu, l) => irv(pu, l),
-        Borda: (pu, l) => borda(pu, l),
-        Score: (pu, l) => scoreVote(pu, l),
         Approval: (pu, l) => approval(pu, l),
+        RCV: (pu, l) => irv(pu, l),
         STAR: (pu, l) => star(pu, l),
         Condorcet: (pu, l) => condorcet(pu, l),
+        Score: (pu, l) => scoreVote(pu, l),
+        Borda: (pu, l) => borda(pu, l),
     };
     const out = {};
     for (const k of Object.keys(all)) if (enabled[k]) out[k] = all[k];
@@ -1057,6 +1057,12 @@ function chartBarOpts(title, topTier = null, values = []) {
 
 const chartInstances = {};
 
+function resizeAllCharts() {
+    Object.values(chartInstances).forEach(chart => {
+        if (chart && typeof chart.resize === 'function') chart.resize();
+    });
+}
+
 function destroyChart(id) {
     if (chartInstances[id]) { chartInstances[id].destroy(); delete chartInstances[id]; }
 }
@@ -1209,16 +1215,35 @@ function plotRobustness(res, tVals, lVals, methods) {
     const dt = tVals[1] - tVals[0], dl = lVals[1] - lVals[0];
     const tot = (tVals[nt - 1] - tVals[0]) * (lVals[nl - 1] - lVals[0]);
     const tauRange = linspace(0.3, 1.0, 80);
+    const methodNames = Object.keys(methods);
+
+    const robustnessSeries = {};
+    for (const m of methodNames) {
+        robustnessSeries[m] = tauRange.map(tau => {
+            let count = 0;
+            for (let li = 0; li < nl; li++) for (let ti = 0; ti < nt; ti++) if (res[m][li][ti] >= tau) count++;
+            return count * dt * dl / tot;
+        });
+    }
+
+    // Trim left-side tau values until at least one method has visible robustness.
+    const detectionEpsilon = 1e-6;
+    let firstDetectedIdx = 0;
+    for (let i = 0; i < tauRange.length; i++) {
+        if (methodNames.some(m => robustnessSeries[m][i] > detectionEpsilon)) {
+            firstDetectedIdx = i;
+            break;
+        }
+    }
+    const leftPadPoints = 1;
+    const startIdx = Math.max(0, firstDetectedIdx - leftPadPoints);
+    const tauSlice = tauRange.slice(startIdx);
 
     newChart('chart-robustness', 'line', {
-        labels: tauRange.map(v => v.toFixed(2)),
-        datasets: Object.keys(methods).map(m => ({
+        labels: tauSlice.map(v => v.toFixed(2)),
+        datasets: methodNames.map(m => ({
             label: m,
-            data: tauRange.map(tau => {
-                let count = 0;
-                for (let li = 0; li < nl; li++) for (let ti = 0; ti < nt; ti++) if (res[m][li][ti] >= tau) count++;
-                return count * dt * dl / tot;
-            }),
+            data: robustnessSeries[m].slice(startIdx),
             borderColor: METHOD_COLORS[m],
             backgroundColor: METHOD_COLORS[m] + '22',
             borderWidth: 2,
@@ -1658,6 +1683,7 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
         document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
         btn.classList.add('active');
         document.getElementById('tab-' + btn.dataset.tab).classList.add('active');
+        requestAnimationFrame(resizeAllCharts);
     });
 });
 

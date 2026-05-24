@@ -97,13 +97,13 @@
                 <div class="toggle-row">
                     <label class="toggle"><input type="checkbox" id="m-plurality"
                             checked /><span>Plurality</span></label>
-                    <label class="toggle"><input type="checkbox" id="m-irv" checked /><span>RCV</span></label>
                     <label class="toggle"><input type="checkbox" id="m-approval" checked /><span>Approval</span></label>
-                    <label class="toggle"><input type="checkbox" id="m-borda" checked /><span>Borda</span></label>
-                    <label class="toggle"><input type="checkbox" id="m-score" checked /><span>Score</span></label>
+                    <label class="toggle"><input type="checkbox" id="m-irv" checked /><span>RCV</span></label>
                     <label class="toggle"><input type="checkbox" id="m-star" checked /><span>STAR</span></label>
                     <label class="toggle"><input type="checkbox" id="m-condorcet"
                             checked /><span>Condorcet</span></label>
+                    <label class="toggle"><input type="checkbox" id="m-score" checked /><span>Score</span></label>
+                    <label class="toggle"><input type="checkbox" id="m-borda" checked /><span>Borda</span></label>
                 </div>
             </div>
 
@@ -135,13 +135,13 @@
             <div class="tab-bar">
                 <button class="tab-btn active" data-tab="slices">Axis Slices</button>
                 <button class="tab-btn" data-tab="heatmaps">Heat Maps</button>
+                <button class="tab-btn" data-tab="approval-diff">Approval Δ</button>
                 <button class="tab-btn" data-tab="robustness">Robustness</button>
                 <button class="tab-btn" data-tab="scenarios">Scenarios</button>
                 <button class="tab-btn" data-tab="scenario-overall">Scenario Improvement</button>
                 <button class="tab-btn" data-tab="weighted">Weighted VSE</button>
                 <button class="tab-btn" data-tab="weighted-overall">Weighted Improvement</button>
                 <button class="tab-btn" data-tab="hypothesis-tests">Hypothesis Tests</button>
-                <button class="tab-btn" data-tab="approval-diff">Approval Δ</button>
             </div>
 
             <!-- Slices -->
@@ -161,6 +161,15 @@
             <div class="tab-pane" id="tab-heatmaps">
                 <p class="chart-desc">VSE as a 2-D function of $(t, \ell)$ for each method. Brighter = higher VSE.</p>
                 <div id="heatmap-container" class="heatmap-grid"></div>
+            </div>
+
+            <!-- Approval diff -->
+            <div class="tab-pane" id="tab-approval-diff">
+                <p class="chart-desc">
+                    Approval VSE minus each other method across $(t,\ell)$ space.
+                    Green = Approval wins; red = other method wins.
+                </p>
+                <div id="diff-container" class="heatmap-grid"></div>
             </div>
 
             <!-- Robustness -->
@@ -272,14 +281,6 @@
                 <div id="hypothesis-table-wrap" class="table-wrap"></div>
             </div>
 
-            <!-- Approval diff -->
-            <div class="tab-pane" id="tab-approval-diff">
-                <p class="chart-desc">
-                    Approval VSE minus each other method across $(t,\ell)$ space.
-                    Green = Approval wins; red = other method wins.
-                </p>
-                <div id="diff-container" class="heatmap-grid"></div>
-            </div>
         </section>
 
         <!-- ── Explainer ── -->

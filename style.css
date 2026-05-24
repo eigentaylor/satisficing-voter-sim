@@ -825,8 +825,25 @@ input[type="range"]::-webkit-slider-thumb:hover {
     border: 1px solid var(--border);
     border-radius: 8px;
     padding: 0.75rem;
+    position: relative;
+    min-height: 360px;
     max-width: 760px;
     margin: 0 auto;
+}
+
+.chart-wrap-full canvas {
+    width: 100% !important;
+    height: 320px !important;
+}
+
+@media (max-width: 700px) {
+    .chart-wrap-full {
+        min-height: 300px;
+    }
+
+    .chart-wrap-full canvas {
+        height: 260px !important;
+    }
 }
 
 /* ── heatmap canvas grid ── */
