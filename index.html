@@ -329,16 +329,24 @@
                 <summary>Read Conclusions</summary>
                 <div class="conclusions-body">
                     <p>
-                        Ranked Choice Voting (RCV) performs surprisingly poorly across the board. Its VSE improvement
+                        Ranked Choice Voting (RCV) performs unsurprisingly poorly across the board. In regular VSE
+                        simulations, RCV is already known to severely underperform methods like Approval, STAR, and
+                        Condorcet. We find this holds in this simulation, where the VSE improvement
                         over
                         Plurality is quite small, particularly proportional to the administrative cost it has over
                         methods like Approval, STAR, and Condorcet. The latter three methods all significantly
-                        outperform RCV across the board, and would have a lower cost to implement.
+                        outperform RCV across the board, and would have a much lower cost to implement (particularly due to precinct summability).
                     </p>
                     <p>
                         Borda performs exceptionally well under honest conditions, Borda is known for
                         being particularly vulnerable to strategic voting, and is thus not generally seriously
                         considered for political elections.
+                    </p>
+                    <p>
+                        Score voting also performs exceptionally well, under honest conditions. However, Score is also known to be vulnerable to strategic voting, and like Borda, is not as popularly considered for political elections compared to STAR voting.
+                    </p>
+                    <p>
+                        As in regular VSE simulations, STAR performs very strongly, being a top tier method under ideal conditions. However, this performance starts to falter and Approval begins to outperform STAR as energy decreases, even when voters are perfectly informed. Under the scenarios and weighted priors considered, STAR and Approval are almost indistinguishable.
                     </p>
                     <p>
                         Similar to Yee diagrams, Approval tends to perform extremely similarly to Condorcet methods.
@@ -356,30 +364,15 @@
                         uninformed and easily exhausted.
                     </p>
                     <p>
-                        The fact that Approval does so well under low energy, whereas STAR and SCORE have major
-                        performance drops, has multiple implications:
+                        The fact that Approval does so well under low energy suggests that bullet voting is even less of
+                        a problem for Approval than many critics
+                        assume, since even if voters refuse to approve more than a few candidates, Approval can
+                        still maintain excellent performance. This is likely because the utility maximizer is
+                        probably among most voters' top two or three choices, so as long as voters <i>can</i>
+                        approve at least their top few candidates, the best candidate still generally earns enough
+                        approvals to win. Ranked methods like Borda and Condorcet also perform about as well as
+                        Approval for likely similar reasons, but RCV still generally underperforms.
                     </p>
-                    <ul>
-                        <li>
-                            It suggests that bullet voting is even less of a problem for Approval than many critics
-                            assume, since even if voters refuse to approve more than a few candidates, Approval can
-                            still maintain excellent performance. This is likely because the utility maximizer is
-                            probably among most voters' top two or three choices, so as long as voters <i>can</i>
-                            approve at least their top few candidates, the best candidate still generally earns enough
-                            approvals to win. Ranked methods like Borda and Condorcet also perform about as well as
-                            Approval for likely similar reasons, but RCV still generally underperforms.
-                        </li>
-                        <li>
-                            Second, it means that more complex scoring methods like STAR and SCORE require voters to
-                            express
-                            preferences for more candidates in order to outperform Approval. If voters are likely to
-                            only fill out part of their ballot, or truncate their scores to just a few candidates, then
-                            the theoretical advantages of STAR/SCORE seen in <a
-                                href="https://electionscience.github.io/vse-sim/VSEbasic" target="_blank"
-                                rel="noopener">VSE simulations</a> with full ballots may not
-                            materialise in practice.
-                        </li>
-                    </ul>
                     <p>
                         It should be mentioned that Approval naturally has a structural advantage in this model due to
                         the way the considered set and approval threshold interact, which may contribute to its strong
@@ -420,7 +413,7 @@
                     <p>
                         When we consider the overall weighted VSE across a range of priors on voter imperfection, we see
                         a large gain in VSE moving away from plurality. However, when comparing non-plurality
-                        methods to approval using the same priors, the gain becomes negligible or even negative in most
+                        methods to approval using the same priors, the gain becomes negligible or even negative in many
                         cases. We find little to no evidence that we would see major performance improvements from
                         moving to more complex methods like STAR or Condorcet, compared to Approval, once we take into
                         account realistic voter imperfections and the likelihood of voters not filling out their entire
