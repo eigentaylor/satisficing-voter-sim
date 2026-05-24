@@ -625,15 +625,15 @@ function renderHypothesisTests(state) {
                         <tr>
                             <th>${rowName}</th>
                             ${methodNames.map(colName => {
-                                if (rowName === colName) {
-                                    return '<td class="pairwise-diag">-</td>';
-                                }
-                                const row = rowByKey[`${rowName}>${colName}`];
-                                const cellClass = row ? row.takeawayClass : 'sig-no';
-                                const shortLabel = cellClass === 'sig-yes' ? 'Yes' : (cellClass === 'sig-mixed' ? 'Mixed' : 'No');
-                                const explanation = row ? detailText(row) : `No result for ${rowName} > ${colName}.`;
-                                const hoverCard = row ? tooltipHtml(row) : `<div class="pairwise-hover-title">${escapeHtml(rowName)} vs ${escapeHtml(colName)}</div><div class="pairwise-hover-body">No result available for this comparison.</div>`;
-                                return `
+        if (rowName === colName) {
+            return '<td class="pairwise-diag">-</td>';
+        }
+        const row = rowByKey[`${rowName}>${colName}`];
+        const cellClass = row ? row.takeawayClass : 'sig-no';
+        const shortLabel = cellClass === 'sig-yes' ? 'Yes' : (cellClass === 'sig-mixed' ? 'Mixed' : 'No');
+        const explanation = row ? detailText(row) : `No result for ${rowName} > ${colName}.`;
+        const hoverCard = row ? tooltipHtml(row) : `<div class="pairwise-hover-title">${escapeHtml(rowName)} vs ${escapeHtml(colName)}</div><div class="pairwise-hover-body">No result available for this comparison.</div>`;
+        return `
                                     <td class="pairwise-cell-slot">
                                         <button
                                             type="button"
@@ -643,7 +643,7 @@ function renderHypothesisTests(state) {
                                         <div class="pairwise-hover-template" hidden>${hoverCard}</div>
                                     </td>
                                 `;
-                            }).join('')}
+    }).join('')}
                         </tr>
                     `).join('')}
                 </tbody>
