@@ -66,11 +66,11 @@ Given perceived utilities $\tilde{u}_i$ and considered set $\mathcal{S}_i$ (the 
 
 **Rankings (RCV, Borda, Condorcet).** Rank the candidates in $\mathcal{S}_i$ in descending order of $\tilde{u}_i$. Candidates outside $\mathcal{S}_i$ are left unranked (RCV treats these as exhausted; Borda assigns them zero points).
 
-**Scoring (STAR, Range).** For $c \in \mathcal{S}_i$, assign a score proportional to $\tilde{u}_i(c)$ normalized to $[0, s_{\max}]$ within the considered set:
+**Scoring (STAR, Range).** First compute the voter's full-ballot score scale by normalizing $\tilde{u}_i(c)$ to $[0, s_{\max}]$ across all $m$ candidates:
 
-$$\text{score}_i(c) = s_{\max} \cdot \frac{\tilde{u}_i(c) - \min_{c' \in \mathcal{S}_i} \tilde{u}_i(c')}{\max_{c' \in \mathcal{S}_i} \tilde{u}_i(c') - \min_{c' \in \mathcal{S}_i} \tilde{u}_i(c')}$$
+$$\text{score}_i(c) = s_{\max} \cdot \frac{\tilde{u}_i(c) - \min_{c'} \tilde{u}_i(c')}{\max_{c'} \tilde{u}_i(c') - \min_{c'} \tilde{u}_i(c')}$$
 
-When all utilities in the considered set are equal (including when $K=1$), every candidate in $\mathcal{S}_i$ receives $s_{\max}$. Candidates outside $\mathcal{S}_i$ receive $0$.
+Then keep those scores only for candidates in $\mathcal{S}_i$ and assign $0$ to candidates outside $\mathcal{S}_i$. When all utilities are equal, every candidate's full-ballot score is $s_{\max}$, so every considered candidate receives $s_{\max}$ and every unconsidered candidate receives $0$.
 
 **Approval.** Voter $i$ approves candidates in $\mathcal{S}_i$ whose perceived utility exceeds their *global personal mean*:
 

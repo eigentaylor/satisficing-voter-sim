@@ -277,7 +277,8 @@
                 <p>
                     <strong>Plurality:</strong> vote for the single top perceived candidate.<br />
                     <strong>RCV / Borda / Condorcet:</strong> rank the considered set in order of $\tilde{u}_i$.<br />
-                    <strong>Score / STAR:</strong> normalise $\tilde{u}_i$ within the considered set to $[0,5]$.<br />
+                    <strong>Score / STAR:</strong> compute full-ballot 0-5 scores from all candidates, then keep
+                    those scores only for the considered set and give 0 to the rest.<br />
                     <strong>Approval:</strong> approve candidates in the considered set whose $\tilde{u}_i$ exceeds
                     the voter's global personal mean (computed over all $m$ candidates).
                 </p>

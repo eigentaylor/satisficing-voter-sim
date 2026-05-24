@@ -140,35 +140,33 @@ function borda(pu, l) {
     return argmax(scores);
 }
 
-function scoreVote(pu, l) {
-    const nv = pu.length, nc = pu[0].length;
-    const tidxAll = topIdx(pu, l);
-    const totals = new Array(nc).fill(0);
-    for (let i = 0; i < nv; i++) {
-        const tidx = tidxAll[i];
-        const vals = tidx.map(c => pu[i][c]);
-        const lo = Math.min(...vals), hi = Math.max(...vals);
-        const denom = hi - lo < 1e-9 ? 1 : hi - lo;
-        for (let k = 0; k < tidx.length; k++) {
-            totals[tidx[k]] += hi - lo < 1e-9 ? 5 : 5 * (vals[k] - lo) / denom;
-        }
-    }
-    return argmax(totals);
-}
-
-function star(pu, l) {
+function globalScoreBallots(pu, l) {
     const nv = pu.length, nc = pu[0].length;
     const tidxAll = topIdx(pu, l);
     const ballots = Array.from({ length: nv }, () => new Array(nc).fill(0));
     for (let i = 0; i < nv; i++) {
-        const tidx = tidxAll[i];
-        const vals = tidx.map(c => pu[i][c]);
-        const lo = Math.min(...vals), hi = Math.max(...vals);
-        const denom = hi - lo < 1e-9 ? 1 : hi - lo;
-        for (let k = 0; k < tidx.length; k++) {
-            ballots[i][tidx[k]] = hi - lo < 1e-9 ? 5 : 5 * (vals[k] - lo) / denom;
+        const row = pu[i];
+        const lo = Math.min(...row), hi = Math.max(...row);
+        const flat = hi - lo < 1e-9;
+        const denom = flat ? 1 : hi - lo;
+        for (const c of tidxAll[i]) {
+            ballots[i][c] = flat ? 5 : 5 * (row[c] - lo) / denom;
         }
     }
+    return ballots;
+}
+
+function scoreVote(pu, l) {
+    const ballots = globalScoreBallots(pu, l);
+    const nc = ballots[0].length;
+    const totals = new Array(nc).fill(0);
+    for (const ballot of ballots) for (let j = 0; j < nc; j++) totals[j] += ballot[j];
+    return argmax(totals);
+}
+
+function star(pu, l) {
+    const ballots = globalScoreBallots(pu, l);
+    const nv = ballots.length, nc = ballots[0].length;
     const totals = new Array(nc).fill(0);
     for (let i = 0; i < nv; i++) for (let j = 0; j < nc; j++) totals[j] += ballots[i][j];
     const sorted = Array.from({ length: nc }, (_, i) => i).sort((a, b) => totals[b] - totals[a]);
