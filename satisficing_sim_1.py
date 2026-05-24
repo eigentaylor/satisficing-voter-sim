@@ -177,21 +177,24 @@ def borda(pu, l):
         np.add.at(scores, tidx[:, rank], pts[rank])
     return int(np.argmax(scores))
 
-def star(pu, l):
+def global_score_ballots(pu, l):
     nv, nc = pu.shape
-    tidx, K = top_idx(pu, l)
-    top_u = np.take_along_axis(pu, tidx, axis=1)   # (nv, K)
+    tidx, _ = top_idx(pu, l)
 
-    lo = top_u.min(axis=1, keepdims=True)
-    hi = top_u.max(axis=1, keepdims=True)
+    lo = pu.min(axis=1, keepdims=True)
+    hi = pu.max(axis=1, keepdims=True)
     denom = hi - lo
     flat  = (denom < 1e-9).squeeze(axis=1)  # voters where lo == hi
     denom[denom < 1e-9] = 1.0
-    scaled = 5 * (top_u - lo) / denom
-    scaled[flat] = 5.0                       # give max score to all considered
+    scaled = 5 * (pu - lo) / denom
+    scaled[flat] = 5.0                       # when utilities are flat, give max score to all candidates
 
     ballots = np.zeros((nv, nc))
-    np.put_along_axis(ballots, tidx, scaled, axis=1)
+    np.put_along_axis(ballots, tidx, np.take_along_axis(scaled, tidx, axis=1), axis=1)
+    return ballots
+
+def star(pu, l):
+    ballots = global_score_ballots(pu, l)
 
     totals = ballots.sum(axis=0)
     f1, f2 = np.argsort(-totals)[:2]
@@ -199,20 +202,7 @@ def star(pu, l):
                    >= (ballots[:, f2] > ballots[:, f1]).sum() else f2)
 
 def score(pu, l):
-    nv, nc = pu.shape
-    tidx, K = top_idx(pu, l)
-    top_u = np.take_along_axis(pu, tidx, axis=1)   # (nv, K)
-
-    lo = top_u.min(axis=1, keepdims=True)
-    hi = top_u.max(axis=1, keepdims=True)
-    denom = hi - lo
-    flat  = (denom < 1e-9).squeeze(axis=1)  # voters where lo == hi
-    denom[denom < 1e-9] = 1.0
-    scaled = 5 * (top_u - lo) / denom
-    scaled[flat] = 5.0                       # give max score to all considered
-
-    ballots = np.zeros((nv, nc))
-    np.put_along_axis(ballots, tidx, scaled, axis=1)
+    ballots = global_score_ballots(pu, l)
     totals = ballots.sum(axis=0)
     return int(np.argmax(totals))
 
