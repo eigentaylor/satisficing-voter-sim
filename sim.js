@@ -265,6 +265,7 @@ let isSimRunning = false;
 let lastSimResult = null;
 
 const HYPOTHESIS_ALPHA = 0.01;
+let hypothesisTableSort = { key: 'label', dir: 'asc' };
 
 function orderedEnabledMethods(methods) {
     return Object.keys(METHOD_COLORS).filter(name => methods[name]);
@@ -698,34 +699,88 @@ function renderHypothesisTests(state) {
 
     matrixWrap.addEventListener('mouseleave', hideHoverCard);
 
-    tableWrap.innerHTML = `
-        <table class="result-table">
-            <thead>
-                <tr>
-                    <th>Hypothesis</th>
-                    <th>Pooled mean Δ</th>
-                    <th>Pooled p (mean-diff)</th>
-                    <th>Pooled p (sign test)</th>
-                    <th>Per-grid nominal sig</th>
-                    <th>Per-grid Bonf sig (mean-diff)</th>
-                    <th>Per-grid Bonf sig (sign)</th>
-                </tr>
-            </thead>
-            <tbody>
-                ${rows.map(r => `
+    const sortColumns = [
+        { key: 'label', label: 'Hypothesis', type: 'string' },
+        { key: 'pooledMeanDelta', label: 'Pooled mean Δ', type: 'number' },
+        { key: 'pooledMeanP', label: 'Pooled p (mean-diff)', type: 'number' },
+        { key: 'pooledSignP', label: 'Pooled p (sign test)', type: 'number' },
+        { key: 'sigMeanNom', label: 'Per-grid nominal sig', type: 'number' },
+        { key: 'sigMeanAdj', label: 'Per-grid Bonf sig (mean-diff)', type: 'number' },
+        { key: 'sigSignAdj', label: 'Per-grid Bonf sig (sign)', type: 'number' },
+    ];
+
+    const sortedRows = () => {
+        const active = sortColumns.find(c => c.key === hypothesisTableSort.key) || sortColumns[0];
+        const dirMul = hypothesisTableSort.dir === 'asc' ? 1 : -1;
+        const toNumber = v => (Number.isFinite(v) ? v : (hypothesisTableSort.dir === 'asc' ? Infinity : -Infinity));
+        return [...rows].sort((a, b) => {
+            if (active.type === 'string') {
+                return dirMul * String(a[active.key]).localeCompare(String(b[active.key]));
+            }
+            const av = toNumber(a[active.key]);
+            const bv = toNumber(b[active.key]);
+            if (av === bv) return a.label.localeCompare(b.label);
+            return dirMul * (av - bv);
+        });
+    };
+
+    const renderHypothesisTable = () => {
+        const rowsToRender = sortedRows();
+        tableWrap.innerHTML = `
+            <table class="result-table">
+                <thead>
                     <tr>
-                        <td>${r.label}</td>
-                        <td>${Number.isFinite(r.pooledMeanDelta) ? r.pooledMeanDelta.toFixed(5) : 'NA'}</td>
-                        <td class="${r.pooledMeanSig ? 'sig-yes' : 'sig-no'}">${fmtP(r.pooledMeanP)}</td>
-                        <td class="${r.pooledSignSig ? 'sig-yes' : 'sig-no'}">${fmtP(r.pooledSignP)}</td>
-                        <td>${r.sigMeanNom}/${r.totalCells}</td>
-                        <td>${r.sigMeanAdj}/${r.totalCells}</td>
-                        <td>${r.sigSignAdj}/${r.totalCells}</td>
+                        ${sortColumns.map(col => {
+                            const active = col.key === hypothesisTableSort.key;
+                            const arrow = active ? (hypothesisTableSort.dir === 'asc' ? '▲' : '▼') : '↕';
+                            return `
+                                <th>
+                                    <button
+                                        type="button"
+                                        class="sortable-th ${active ? 'is-active' : ''}"
+                                        data-sort-key="${col.key}"
+                                        aria-label="Sort by ${escapeHtml(col.label)}"
+                                    >
+                                        <span>${escapeHtml(col.label)}</span>
+                                        <span class="sort-arrow" aria-hidden="true">${arrow}</span>
+                                    </button>
+                                </th>
+                            `;
+                        }).join('')}
                     </tr>
-                `).join('')}
-            </tbody>
-        </table>
-    `;
+                </thead>
+                <tbody>
+                    ${rowsToRender.map(r => `
+                        <tr>
+                            <td>${escapeHtml(r.label)}</td>
+                            <td>${Number.isFinite(r.pooledMeanDelta) ? r.pooledMeanDelta.toFixed(5) : 'NA'}</td>
+                            <td class="${r.pooledMeanSig ? 'sig-yes' : 'sig-no'}">${fmtP(r.pooledMeanP)}</td>
+                            <td class="${r.pooledSignSig ? 'sig-yes' : 'sig-no'}">${fmtP(r.pooledSignP)}</td>
+                            <td>${r.sigMeanNom}/${r.totalCells}</td>
+                            <td>${r.sigMeanAdj}/${r.totalCells}</td>
+                            <td>${r.sigSignAdj}/${r.totalCells}</td>
+                        </tr>
+                    `).join('')}
+                </tbody>
+            </table>
+        `;
+
+        tableWrap.querySelectorAll('.sortable-th').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const key = btn.dataset.sortKey;
+                if (!key) return;
+                if (hypothesisTableSort.key === key) {
+                    hypothesisTableSort.dir = hypothesisTableSort.dir === 'asc' ? 'desc' : 'asc';
+                } else {
+                    hypothesisTableSort.key = key;
+                    hypothesisTableSort.dir = 'asc';
+                }
+                renderHypothesisTable();
+            });
+        });
+    };
+
+    renderHypothesisTable();
 }
 
 function linspace(a, b, n) {
