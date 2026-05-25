@@ -740,6 +740,25 @@ function fmtP(p) {
     return p.toFixed(4);
 }
 
+function fmtPercent(value, decimals = 1) {
+    if (!Number.isFinite(value)) return 'NA';
+    return `${(value * 100).toFixed(decimals)}%`;
+}
+
+function percentTickLabel(value, decimals = 0) {
+    const numeric = Number(value);
+    if (!Number.isFinite(numeric)) return String(value);
+    return `${(numeric * 100).toFixed(decimals)}%`;
+}
+
+function percentTickLabelUpTo100(value, decimals = 0) {
+    const numeric = Number(value);
+    if (!Number.isFinite(numeric)) return String(value);
+    if (numeric > 1 + 1e-9) return '';
+    const capped = Math.min(numeric, 1);
+    return `${(capped * 100).toFixed(decimals)}%`;
+}
+
 function escapeHtml(value) {
     return String(value)
         .replace(/&/g, '&amp;')
@@ -823,12 +842,12 @@ function renderHypothesisTests(state) {
 
     const rowByKey = Object.fromEntries(rows.map(row => [`${row.x}>${row.y}`, row]));
     const methodNames = analysis.methodNames;
-    const detailText = row => `${row.takeaway} Pooled mean Δ = ${Number.isFinite(row.pooledMeanDelta) ? row.pooledMeanDelta.toFixed(5) : 'NA'}, pooled p (mean-diff) = ${fmtP(row.pooledMeanP)}, pooled p (sign test) = ${fmtP(row.pooledSignP)}, Bonferroni-significant cells = ${row.sigMeanAdj}/${row.totalCells}.`;
+    const detailText = row => `${row.takeaway} Pooled mean Δ = ${fmtPercent(row.pooledMeanDelta, 2)}, pooled p (mean-diff) = ${fmtP(row.pooledMeanP)}, pooled p (sign test) = ${fmtP(row.pooledSignP)}, Bonferroni-significant cells = ${row.sigMeanAdj}/${row.totalCells}.`;
     const tooltipHtml = row => `
         <div class="pairwise-hover-title">${escapeHtml(row.x)} vs ${escapeHtml(row.y)}</div>
         <div class="pairwise-hover-body">${escapeHtml(row.takeaway)}</div>
         <div class="pairwise-hover-metrics">
-            <span>Pooled mean Δ: ${Number.isFinite(row.pooledMeanDelta) ? row.pooledMeanDelta.toFixed(5) : 'NA'}</span>
+            <span>Pooled mean Δ: ${fmtPercent(row.pooledMeanDelta, 2)}</span>
             <span>Mean-diff p: ${fmtP(row.pooledMeanP)}</span>
             <span>Sign-test p: ${fmtP(row.pooledSignP)}</span>
             <span>Bonferroni cells: ${row.sigMeanAdj}/${row.totalCells}</span>
@@ -982,7 +1001,7 @@ function renderHypothesisTests(state) {
                     ${rowsToRender.map(r => `
                         <tr>
                             <td>${escapeHtml(r.label)}</td>
-                            <td>${Number.isFinite(r.pooledMeanDelta) ? r.pooledMeanDelta.toFixed(5) : 'NA'}</td>
+                            <td>${fmtPercent(r.pooledMeanDelta, 2)}</td>
                             <td class="${r.pooledMeanSig ? 'sig-yes' : 'sig-no'}">${fmtP(r.pooledMeanP)}</td>
                             <td class="${r.pooledSignSig ? 'sig-yes' : 'sig-no'}">${fmtP(r.pooledSignP)}</td>
                             <td>${r.sigMeanNom}/${r.totalCells}</td>
@@ -1064,6 +1083,30 @@ const BAR_VALUE_LABELS_PLUGIN = {
             });
         });
 
+        ctx.restore();
+    },
+};
+
+const HUNDRED_PERCENT_LINE_PLUGIN = {
+    id: 'hundredPercentLine',
+    afterDraw(chart, args, pluginOptions) {
+        if (!pluginOptions?.enabled) return;
+
+        const yScale = chart.scales?.y;
+        const area = chart.chartArea;
+        if (!yScale || !area) return;
+        if (yScale.min > 1 || yScale.max < 1) return;
+
+        const yPx = yScale.getPixelForValue(1);
+        const { ctx } = chart;
+        ctx.save();
+        ctx.setLineDash(pluginOptions.dash || [6, 4]);
+        ctx.strokeStyle = pluginOptions.color || 'rgba(216, 216, 216, 0.55)';
+        ctx.lineWidth = Number.isFinite(pluginOptions.lineWidth) ? pluginOptions.lineWidth : 1;
+        ctx.beginPath();
+        ctx.moveTo(area.left, yPx);
+        ctx.lineTo(area.right, yPx);
+        ctx.stroke();
         ctx.restore();
     },
 };
@@ -1195,7 +1238,7 @@ const TOP_TIER_STARS_PLUGIN = {
     },
 };
 
-Chart.register(DARK_PLUGIN, BAR_VALUE_LABELS_PLUGIN, TOP_TIER_STARS_PLUGIN);
+Chart.register(DARK_PLUGIN, BAR_VALUE_LABELS_PLUGIN, TOP_TIER_STARS_PLUGIN, HUNDRED_PERCENT_LINE_PLUGIN);
 
 function currentVotingModeLabel() {
     const useStrategy = document.getElementById('strategy-on')?.checked ?? false;
@@ -1208,27 +1251,46 @@ function composeChartTitle(title) {
     return [title, modeLabel];
 }
 
-function chartLineOpts(title, xLabel, yLabel) {
+function chartLineOpts(title, xLabel, yLabel, options = {}) {
+    const xPercent = !!options.xPercent;
+    const yPercent = !!options.yPercent;
     const chartTitle = composeChartTitle(title);
     return {
         responsive: true,
         maintainAspectRatio: false,
         animation: false,
-        plugins: {
-            legend: { labels: { color: '#d8d8d8', boxWidth: 12, font: { size: 11 } } },
-            title: { display: true, text: chartTitle, color: '#d8d8d8', font: { size: 12 } },
-        },
         scales: {
             x: {
                 title: { display: true, text: xLabel, color: '#888' },
-                ticks: { color: '#888', maxTicksLimit: 8 },
+                ticks: {
+                    color: '#888',
+                    maxTicksLimit: 8,
+                    callback: xPercent
+                        ? function (value, index) {
+                            const labels = typeof this.getLabels === 'function' ? this.getLabels() : null;
+                            const labelValue = Array.isArray(labels) ? labels[index] : value;
+                            return percentTickLabel(labelValue, 0);
+                        }
+                        : undefined,
+                },
                 grid: { color: '#282828' },
             },
             y: {
                 min: 0, max: 1.05,
                 title: { display: true, text: yLabel, color: '#888' },
-                ticks: { color: '#888' },
+                ticks: {
+                    color: '#888',
+                    callback: yPercent ? value => percentTickLabelUpTo100(value, 0) : undefined,
+                },
                 grid: { color: '#282828' },
+            },
+        },
+        plugins: {
+            legend: { labels: { color: '#d8d8d8', boxWidth: 12, font: { size: 11 } } },
+            title: { display: true, text: chartTitle, color: '#d8d8d8', font: { size: 12 } },
+            hundredPercentLine: {
+                enabled: yPercent,
+                dash: [6, 4],
             },
         },
     };
@@ -1281,12 +1343,25 @@ function chartBarOpts(title, topTier = null, values = []) {
             barValueLabels: {
                 fontSize: barValueLabelFontSize,
                 offset: barValueLabelOffset,
+                formatter: value => fmtPercent(value, 1),
             },
             topTierStars: topTierOpts,
+            hundredPercentLine: {
+                enabled: true,
+                dash: [6, 4],
+            },
         },
         scales: {
             x: { ticks: { color: '#888', font: { size: 10 } }, grid: { color: '#282828' } },
-            y: { min: 0, max: yMax, ticks: { color: '#888' }, grid: { color: '#282828' } },
+            y: {
+                min: 0,
+                max: yMax,
+                ticks: {
+                    color: '#888',
+                    callback: value => percentTickLabelUpTo100(value, 0),
+                },
+                grid: { color: '#282828' },
+            },
         },
     };
 }
@@ -1343,7 +1418,7 @@ function plotSlices(res, tVals, lVals, methods) {
             pointRadius: 2,
             tension: 0.3,
         })),
-    }, chartLineOpts('Full ballot (ℓ = 1) — VSE vs knowledge t', 'Knowledge  t', 'VSE'));
+    }, chartLineOpts('Full ballot (ℓ = 1) — VSE vs knowledge t', 'Knowledge  t', 'VSE', { yPercent: true }));
 
     // VSE vs l (t=1)
     newChart('chart-slice-l', 'line', {
@@ -1357,7 +1432,7 @@ function plotSlices(res, tVals, lVals, methods) {
             pointRadius: 2,
             tension: 0.3,
         })),
-    }, chartLineOpts('Perfect knowledge (t = 1) — VSE vs energy ℓ', 'Energy  ℓ', 'VSE'));
+    }, chartLineOpts('Perfect knowledge (t = 1) — VSE vs energy ℓ', 'Energy  ℓ', 'VSE', { yPercent: true }));
 }
 
 // ── Heatmaps (Canvas-based) ───────────────────────────────────────────────────
@@ -1445,7 +1520,7 @@ function buildHeatmapContainer(containerId, res, methods, colorFn, vmin, vmax, l
         cbWrap.appendChild(cbCanvas);
         const labels = document.createElement('div');
         labels.className = 'colorbar-labels';
-        labels.innerHTML = `<span>${vmin.toFixed(1)}</span><span>${((vmin + vmax) / 2).toFixed(2)}</span><span>${vmax.toFixed(1)}</span>`;
+        labels.innerHTML = `<span>${fmtPercent(vmin, 0)}</span><span>${fmtPercent((vmin + vmax) / 2, 0)}</span><span>${fmtPercent(vmax, 0)}</span>`;
         cbWrap.appendChild(labels);
         item.appendChild(cbWrap);
 
@@ -1491,7 +1566,7 @@ function plotRobustness(res, tVals, lVals, methods) {
     const tauSlice = tauRange.slice(startIdx);
 
     newChart('chart-robustness', 'line', {
-        labels: tauSlice.map(v => v.toFixed(2)),
+        labels: tauSlice,
         datasets: methodNames.map(m => ({
             label: m,
             data: robustnessSeries[m].slice(startIdx),
@@ -1501,7 +1576,7 @@ function plotRobustness(res, tVals, lVals, methods) {
             pointRadius: 0,
             tension: 0.3,
         })),
-    }, chartLineOpts('Robustness: fraction of (t,ℓ) space with VSE ≥ τ', 'VSE threshold  τ', 'Fraction of space'));
+    }, chartLineOpts('Robustness: fraction of (t,ℓ) space with VSE ≥ τ', 'VSE threshold  τ', 'Fraction of space', { xPercent: true }));
 }
 
 // ── Scenarios ─────────────────────────────────────────────────────────────────
@@ -1619,7 +1694,7 @@ function plotScenarioOverallImprovement(res, tVals, lVals, methods) {
                 barValueLabels: {
                     fontSize: 11,
                     offset: 4,
-                    formatter: value => Number(value).toFixed(3),
+                    formatter: value => fmtPercent(value, 1),
                 },
                 topTierStars: {
                     enabled: false,
@@ -1628,6 +1703,10 @@ function plotScenarioOverallImprovement(res, tVals, lVals, methods) {
                     maxStars: 3,
                     minTopHeadroom: 0.16,
                 },
+                hundredPercentLine: {
+                    enabled: true,
+                    dash: [6, 4],
+                },
             },
             scales: {
                 x: {
@@ -1635,7 +1714,10 @@ function plotScenarioOverallImprovement(res, tVals, lVals, methods) {
                     grid: { color: '#282828' },
                 },
                 y: {
-                    ticks: { color: '#888' },
+                    ticks: {
+                        color: '#888',
+                        callback: value => percentTickLabelUpTo100(value, 0),
+                    },
                     grid: { color: '#282828' },
                     title: { display: true, text: 'Scenario improvement score', color: '#888' },
                     ...(yClamp ? { min: yClamp.min, max: yClamp.max } : {}),
@@ -1808,7 +1890,7 @@ function plotWeightedOverallImprovement(res, tVals, lVals, methods) {
                 barValueLabels: {
                     fontSize: 11,
                     offset: 4,
-                    formatter: value => Number(value).toFixed(3),
+                    formatter: value => fmtPercent(value, 1),
                 },
                 topTierStars: {
                     enabled: false,
@@ -1817,6 +1899,10 @@ function plotWeightedOverallImprovement(res, tVals, lVals, methods) {
                     maxStars: 3,
                     minTopHeadroom: 0.16,
                 },
+                hundredPercentLine: {
+                    enabled: true,
+                    dash: [6, 4],
+                },
             },
             scales: {
                 x: {
@@ -1824,7 +1910,10 @@ function plotWeightedOverallImprovement(res, tVals, lVals, methods) {
                     grid: { color: '#282828' },
                 },
                 y: {
-                    ticks: { color: '#888' },
+                    ticks: {
+                        color: '#888',
+                        callback: value => percentTickLabelUpTo100(value, 0),
+                    },
                     grid: { color: '#282828' },
                     title: { display: true, text: 'Weighted improvement score', color: '#888' },
                     ...(yClamp ? { min: yClamp.min, max: yClamp.max } : {}),
