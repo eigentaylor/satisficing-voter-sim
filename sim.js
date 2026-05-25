@@ -1278,8 +1278,15 @@ function chartLineOpts(title, xLabel, yLabel, options = {}) {
             y: {
                 min: 0, max: 1.05,
                 title: { display: true, text: yLabel, color: '#888' },
+                afterBuildTicks: yPercent
+                    ? axis => {
+                        axis.ticks = [0, 0.2, 0.4, 0.6, 0.8, 1.0, 1.05].map(v => ({ value: v }));
+                    }
+                    : undefined,
                 ticks: {
                     color: '#888',
+                    autoSkip: yPercent ? false : undefined,
+                    stepSize: yPercent ? 0.2 : undefined,
                     callback: yPercent ? value => percentTickLabelUpTo100(value, 0) : undefined,
                 },
                 grid: { color: '#282828' },
