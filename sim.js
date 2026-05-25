@@ -1278,6 +1278,21 @@ function chartBarOpts(title, topTier = null, values = []) {
     };
 }
 
+function improvementAxisClamp(values) {
+    const clean = values.filter(v => Number.isFinite(v));
+    if (!clean.length) return null;
+
+    const observedMin = Math.min(...clean);
+    const observedMax = Math.max(...clean);
+    const eps = 1e-12;
+
+    // Strict subset checks: only clamp when all observed values are fully inside the target window.
+    if (observedMin > 0 + eps && observedMax < 0.1 - eps) return { min: 0, max: 0.1 };
+    if (observedMax < 0 - eps && observedMin > -0.1 + eps) return { min: -0.1, max: 0 };
+    if (observedMin > -0.1 + eps && observedMax < 0.1 - eps) return { min: -0.1, max: 0.1 };
+    return null;
+}
+
 const chartInstances = {};
 
 function resizeAllCharts() {
@@ -1558,6 +1573,7 @@ function plotScenarioOverallImprovement(res, tVals, lVals, methods) {
         const pluralityVals = targets.map(name => res[name][sc.li][sc.ti] - res['Plurality'][sc.li][sc.ti]);
         const approvalVals = targets.map(name => res[name][sc.li][sc.ti] - res['Approval'][sc.li][sc.ti]);
         const combined = pluralityVals.concat(approvalVals);
+        const yClamp = improvementAxisClamp(combined);
 
         newChart(sc.id, 'bar', {
             labels: targets,
@@ -1609,6 +1625,7 @@ function plotScenarioOverallImprovement(res, tVals, lVals, methods) {
                     ticks: { color: '#888' },
                     grid: { color: '#282828' },
                     title: { display: true, text: 'Scenario improvement score', color: '#888' },
+                    ...(yClamp ? { min: yClamp.min, max: yClamp.max } : {}),
                 },
             },
         });
@@ -1745,6 +1762,7 @@ function plotWeightedOverallImprovement(res, tVals, lVals, methods) {
         const pluralityVals = targets.map(name => scores[name] - scores['Plurality']);
         const approvalVals = targets.map(name => scores[name] - scores['Approval']);
         const combined = pluralityVals.concat(approvalVals);
+        const yClamp = improvementAxisClamp(combined);
 
         newChart(p.id, 'bar', {
             labels: targets,
@@ -1796,6 +1814,7 @@ function plotWeightedOverallImprovement(res, tVals, lVals, methods) {
                     ticks: { color: '#888' },
                     grid: { color: '#282828' },
                     title: { display: true, text: 'Weighted improvement score', color: '#888' },
+                    ...(yClamp ? { min: yClamp.min, max: yClamp.max } : {}),
                 },
             },
         });
