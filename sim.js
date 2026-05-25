@@ -1197,14 +1197,26 @@ const TOP_TIER_STARS_PLUGIN = {
 
 Chart.register(DARK_PLUGIN, BAR_VALUE_LABELS_PLUGIN, TOP_TIER_STARS_PLUGIN);
 
+function currentVotingModeLabel() {
+    const useStrategy = document.getElementById('strategy-on')?.checked ?? false;
+    return useStrategy ? 'Strategic voting' : 'Honest voting';
+}
+
+function composeChartTitle(title) {
+    const modeLabel = currentVotingModeLabel();
+    if (!title) return modeLabel;
+    return [title, modeLabel];
+}
+
 function chartLineOpts(title, xLabel, yLabel) {
+    const chartTitle = composeChartTitle(title);
     return {
         responsive: true,
         maintainAspectRatio: false,
         animation: false,
         plugins: {
             legend: { labels: { color: '#d8d8d8', boxWidth: 12, font: { size: 11 } } },
-            title: { display: !!title, text: title, color: '#d8d8d8', font: { size: 12 } },
+            title: { display: true, text: chartTitle, color: '#d8d8d8', font: { size: 12 } },
         },
         scales: {
             x: {
@@ -1223,6 +1235,7 @@ function chartLineOpts(title, xLabel, yLabel) {
 }
 
 function chartBarOpts(title, topTier = null, values = []) {
+    const chartTitle = composeChartTitle(title);
     const topTierOpts = topTier?.enabled
         ? {
             enabled: true,
@@ -1264,7 +1277,7 @@ function chartBarOpts(title, topTier = null, values = []) {
         },
         plugins: {
             legend: { display: false },
-            title: { display: !!title, text: title, color: '#d8d8d8', font: { size: 11 } },
+            title: { display: true, text: chartTitle, color: '#d8d8d8', font: { size: 11 } },
             barValueLabels: {
                 fontSize: barValueLabelFontSize,
                 offset: barValueLabelOffset,
