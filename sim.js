@@ -1615,7 +1615,7 @@ function plotScenarioOverallImprovement(res, tVals, lVals, methods) {
                     display: true,
                     labels: { color: '#d8d8d8', boxWidth: 12, font: { size: 11 } },
                 },
-                title: { display: true, text: sc.label.replace('\n', ' '), color: '#d8d8d8', font: { size: 11 } },
+                title: { display: true, text: composeChartTitle(sc.label.replace('\n', ' ')), color: '#d8d8d8', font: { size: 11 } },
                 barValueLabels: {
                     fontSize: 11,
                     offset: 4,
@@ -1804,7 +1804,7 @@ function plotWeightedOverallImprovement(res, tVals, lVals, methods) {
                     display: true,
                     labels: { color: '#d8d8d8', boxWidth: 12, font: { size: 11 } },
                 },
-                title: { display: true, text: p.label.replace('\n', ' '), color: '#d8d8d8', font: { size: 11 } },
+                title: { display: true, text: composeChartTitle(p.label.replace('\n', ' ')), color: '#d8d8d8', font: { size: 11 } },
                 barValueLabels: {
                     fontSize: 11,
                     offset: 4,
