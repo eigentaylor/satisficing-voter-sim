@@ -1063,11 +1063,12 @@ const BAR_VALUE_LABELS_PLUGIN = {
         const fontSize = pluginOptions?.fontSize || 11;
         const formatter = pluginOptions?.formatter || (value => Number(value).toFixed(2));
         const offset = pluginOptions?.offset || 4;
+        const placeNegativeBelow = !!pluginOptions?.placeNegativeBelow;
+        const negativeOffset = Number.isFinite(pluginOptions?.negativeOffset) ? pluginOptions.negativeOffset : offset + 6;
 
         ctx.save();
         ctx.fillStyle = color;
         ctx.textAlign = 'center';
-        ctx.textBaseline = 'bottom';
         ctx.font = `600 ${fontSize}px sans-serif`;
 
         chart.data.datasets.forEach((dataset, datasetIndex) => {
@@ -1079,7 +1080,14 @@ const BAR_VALUE_LABELS_PLUGIN = {
                 if (value === null || value === undefined) return;
 
                 const { x, y } = bar.tooltipPosition();
-                ctx.fillText(formatter(value), x, y - offset);
+                const numericValue = Number(value);
+                if (placeNegativeBelow && Number.isFinite(numericValue) && numericValue < 0) {
+                    ctx.textBaseline = 'top';
+                    ctx.fillText(formatter(value), x, y + negativeOffset);
+                } else {
+                    ctx.textBaseline = 'bottom';
+                    ctx.fillText(formatter(value), x, y - offset);
+                }
             });
         });
 
@@ -1702,6 +1710,8 @@ function plotScenarioOverallImprovement(res, tVals, lVals, methods) {
                     fontSize: 11,
                     offset: 4,
                     formatter: value => fmtPercent(value, 1),
+                    placeNegativeBelow: true,
+                    negativeOffset: 8,
                 },
                 topTierStars: {
                     enabled: false,
@@ -1898,6 +1908,8 @@ function plotWeightedOverallImprovement(res, tVals, lVals, methods) {
                     fontSize: 11,
                     offset: 4,
                     formatter: value => fmtPercent(value, 1),
+                    placeNegativeBelow: true,
+                    negativeOffset: 8,
                 },
                 topTierStars: {
                     enabled: false,
