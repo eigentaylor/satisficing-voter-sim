@@ -745,6 +745,12 @@ function fmtPercent(value, decimals = 1) {
     return `${(value * 100).toFixed(decimals)}%`;
 }
 
+function fmtPercentSigned(value, decimals = 2) {
+    if (!Number.isFinite(value)) return 'NA';
+    const sign = value >= 0 ? '+' : '';
+    return `${sign}${(value * 100).toFixed(decimals)}%`;
+}
+
 function percentTickLabel(value, decimals = 0) {
     const numeric = Number(value);
     if (!Number.isFinite(numeric)) return String(value);
@@ -757,6 +763,126 @@ function percentTickLabelUpTo100(value, decimals = 0) {
     if (numeric > 1 + 1e-9) return '';
     const capped = Math.min(numeric, 1);
     return `${(capped * 100).toFixed(decimals)}%`;
+}
+
+function scenarioDirectionalStats(trialVse, li, ti, methodA, methodB) {
+    const aTrials = trialVse?.[methodA]?.[li]?.[ti];
+    const bTrials = trialVse?.[methodB]?.[li]?.[ti];
+    if (!aTrials || !bTrials) return null;
+
+    const n = Math.min(aTrials.length, bTrials.length);
+    if (!Number.isFinite(n) || n < 2) {
+        return {
+            n: Number.isFinite(n) ? n : 0,
+            hypothesis: `${methodA} > ${methodB}`,
+            contrastLabel: `${methodA} - ${methodB}`,
+            mean: NaN,
+            p: NaN,
+            ciLow: NaN,
+            ciHigh: NaN,
+        };
+    }
+
+    const raw = new Float64Array(n);
+    let rawSum = 0;
+    for (let i = 0; i < n; i++) {
+        const d = aTrials[i] - bTrials[i];
+        raw[i] = d;
+        rawSum += d;
+    }
+    const rawMean = rawSum / n;
+    const preferA = rawMean >= 0;
+    const lead = preferA ? methodA : methodB;
+    const lag = preferA ? methodB : methodA;
+    const direction = preferA ? 1 : -1;
+
+    const oriented = new Float64Array(n);
+    for (let i = 0; i < n; i++) oriented[i] = direction * raw[i];
+
+    const test = oneSidedMeanDiffTest(oriented);
+    const z99TwoSided = 2.5758293035489004;
+    const ciLow = Number.isFinite(test.se) ? test.mean - z99TwoSided * test.se : NaN;
+    const ciHigh = Number.isFinite(test.se) ? test.mean + z99TwoSided * test.se : NaN;
+
+    return {
+        n,
+        hypothesis: `${lead} > ${lag}`,
+        contrastLabel: `${lead} - ${lag}`,
+        mean: test.mean,
+        p: test.p,
+        ciLow,
+        ciHigh,
+    };
+}
+
+function renderScenarioImprovementStats(containerEl, sc, targets, trialVse) {
+    if (!containerEl) return;
+    const pluralityLines = [];
+    const approvalLines = [];
+    const scenarioName = String(sc?.label || 'Scenario').split('\n')[0].trim();
+    const modeLabel = currentVotingModeLabel();
+    const pluralityHeader = `Plurality comparisons (${scenarioName}, ${modeLabel})`;
+    const approvalHeader = `Approval comparisons (${scenarioName}, ${modeLabel})`;
+    const renderRow = stats => (
+        (() => {
+            const containsZero = Number.isFinite(stats.ciLow) && Number.isFinite(stats.ciHigh)
+                ? (stats.ciLow <= 0 && stats.ciHigh >= 0 ? 'Yes' : 'No')
+                : 'NA';
+            return (
+        `<tr>` +
+        `<td><strong>${escapeHtml(stats.hypothesis)}</strong></td>` +
+        `<td>p=${fmtP(stats.p)}</td>` +
+        `<td>99% CI for ${escapeHtml(stats.contrastLabel)}: ` +
+        `[${fmtPercentSigned(stats.ciLow, 2)}, ${fmtPercentSigned(stats.ciHigh, 2)}]</td>` +
+        `<td>${containsZero}</td>` +
+        `</tr>`
+            );
+        })()
+    );
+
+    const renderTable = rows => (
+        `<div class="scenario-stats-table-wrap">` +
+        `<table class="scenario-stats-table">` +
+        `<thead><tr><th>Matchup</th><th>p value</th><th>99% CI</th><th>CI contains 0</th></tr></thead>` +
+        `<tbody>${rows.join('')}</tbody>` +
+        `</table>` +
+        `</div>`
+    );
+
+    for (const target of targets) {
+        const vsPlurality = scenarioDirectionalStats(trialVse, sc.li, sc.ti, target, 'Plurality');
+        const vsApproval = scenarioDirectionalStats(trialVse, sc.li, sc.ti, target, 'Approval');
+        if (vsPlurality) pluralityLines.push(renderRow(vsPlurality));
+        if (vsApproval) approvalLines.push(renderRow(vsApproval));
+    }
+
+    if (!pluralityLines.length && !approvalLines.length) {
+        containerEl.innerHTML = '<div class="scenario-stats-note">Trial-level directional tests unavailable for this scenario.</div>';
+        return;
+    }
+
+    const sections = [];
+    if (pluralityLines.length) {
+        sections.push(
+            '<div class="scenario-stats-group">' +
+            `<div class="scenario-stats-group-label">${escapeHtml(pluralityHeader)}</div>` +
+            renderTable(pluralityLines) +
+            '</div>'
+        );
+    }
+    if (approvalLines.length) {
+        sections.push(
+            `<div class="scenario-stats-divider" aria-hidden="true">${escapeHtml(approvalHeader)}</div>` +
+            '<div class="scenario-stats-group">' +
+            renderTable(approvalLines) +
+            '</div>'
+        );
+    }
+
+    containerEl.innerHTML = [
+        '<div class="scenario-stats-title">Directional trial tests (one-sided p, 99% CI)</div>',
+        sections.join(''),
+    ].join('');
 }
 
 function escapeHtml(value) {
@@ -1637,7 +1763,7 @@ function plotScenarios(res, tVals, lVals, methods) {
     }
 }
 
-function plotScenarioOverallImprovement(res, tVals, lVals, methods) {
+function plotScenarioOverallImprovement(res, tVals, lVals, methods, trialVse = null) {
     const names = Object.keys(methods);
     const tab = document.getElementById('tab-scenario-overall');
 
@@ -1645,9 +1771,14 @@ function plotScenarioOverallImprovement(res, tVals, lVals, methods) {
     const hasApproval = names.includes('Approval');
     const targets = names.filter(m => m !== 'Plurality' && m !== 'Approval');
     const emptyMsg = document.getElementById('scenario-overall-empty');
+    const scenarioChartIds = ['chart-so-1', 'chart-so-2', 'chart-so-3', 'chart-so-4'];
 
     if (!hasPlurality || !hasApproval || targets.length === 0) {
-        ['chart-so-1', 'chart-so-2', 'chart-so-3', 'chart-so-4'].forEach(id => destroyChart(id));
+        scenarioChartIds.forEach(id => {
+            destroyChart(id);
+            const statsEl = document.getElementById(`${id}-stats`);
+            if (statsEl) statsEl.innerHTML = '';
+        });
         if (emptyMsg) {
             emptyMsg.style.display = 'block';
             const missing = [
@@ -1741,6 +1872,9 @@ function plotScenarioOverallImprovement(res, tVals, lVals, methods) {
                 },
             },
         });
+
+        const statsEl = document.getElementById(`${sc.id}-stats`);
+        renderScenarioImprovementStats(statsEl, sc, targets, trialVse);
     }
 }
 
@@ -2014,7 +2148,7 @@ function renderChartsFromState(state) {
     plotScenarios(res, tVals, lVals, methods);
     plotWeighted(res, tVals, lVals, methods);
     plotWeightedOverallImprovement(res, tVals, lVals, methods);
-    plotScenarioOverallImprovement(res, tVals, lVals, methods);
+    plotScenarioOverallImprovement(res, tVals, lVals, methods, state.trialVse);
     renderHypothesisTests(state);
     plotApprovalDiff(res, tVals, lVals, methods);
     updateStarLegendVisibility();

@@ -810,6 +810,83 @@ input[type="range"]::-webkit-slider-thumb:hover {
     height: 320px !important;
 }
 
+.scenario-between-stats {
+    margin: -0.2rem 0 0.6rem;
+    padding: 0.5rem 0.75rem;
+    border: 1px dashed #2b3d42;
+    border-radius: 8px;
+    background: #141a1c;
+}
+
+.scenario-stats-title {
+    color: #95abb0;
+    font-size: 0.75rem;
+    letter-spacing: 0.01em;
+    margin-bottom: 0.35rem;
+}
+
+.scenario-stats-table-wrap {
+    overflow-x: auto;
+}
+
+.scenario-stats-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.75rem;
+    color: #b5c3c6;
+}
+
+.scenario-stats-table th,
+.scenario-stats-table td {
+    border: 1px solid #26363a;
+    padding: 0.28rem 0.4rem;
+    text-align: left;
+    vertical-align: top;
+    line-height: 1.35;
+}
+
+.scenario-stats-table thead th {
+    background: #182126;
+    color: #9db2b7;
+    font-size: 0.69rem;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+}
+
+.scenario-stats-table td strong {
+    color: #d7e0e2;
+    font-weight: 600;
+}
+
+.scenario-stats-group + .scenario-stats-group {
+    margin-top: 0.55rem;
+}
+
+.scenario-stats-group-label {
+    color: #8aa0a5;
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    margin-bottom: 0.25rem;
+}
+
+.scenario-stats-divider {
+    margin: 0.65rem 0 0.45rem;
+    padding-top: 0.45rem;
+    border-top: 1px solid #26363a;
+    color: #739097;
+    font-size: 0.68rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+.scenario-stats-note {
+    color: #82969b;
+    font-size: 0.75rem;
+}
+
 @media (max-width: 700px) {
     .chart-row.stacked .chart-wrap {
         min-height: 300px;
