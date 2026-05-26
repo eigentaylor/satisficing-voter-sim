@@ -1405,7 +1405,10 @@ function chartLineOpts(title, xLabel, yLabel, options = {}) {
                             const labelValue = Array.isArray(labels) ? labels[index] : value;
                             return percentTickLabel(labelValue, 0);
                         }
-                        : undefined,
+                        : function (value, index) {
+                            const labels = typeof this.getLabels === 'function' ? this.getLabels() : null;
+                            return Array.isArray(labels) ? labels[index] : value;
+                        },
                 },
                 grid: { color: '#282828' },
             },
