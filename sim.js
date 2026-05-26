@@ -880,7 +880,7 @@ function renderScenarioImprovementStats(containerEl, sc, targets, trialVse) {
     }
 
     containerEl.innerHTML = [
-        '<div class="scenario-stats-title">Directional trial tests (one-sided p, 99% CI). If the CI (confidence interval) does not contain 0, we can be 99% confident that the effect is in the hypothesized direction in the simulation scenario. Otherwise, there is not sufficient evidence to support the hypothesis. A confidence interval such as [1%, 5%] indicates that we can be 99% confident that the true difference lies within this range.</div>',
+        '<div class="scenario-stats-title">Directional trial tests (one-sided p, 99% CI). If the CI (confidence interval) does not contain 0, we can be 99% confident that the effect is in the hypothesized direction in the simulation scenario. Otherwise, there is not sufficient evidence to support the hypothesis. A confidence interval such as [1%, 5%] indicates that we can be 99% confident that the true underlying difference is between 1% and 5%.</div>',
         sections.join(''),
     ].join('');
 }
