@@ -825,17 +825,17 @@ function renderScenarioImprovementStats(containerEl, sc, targets, trialVse) {
     const approvalHeader = `Approval comparisons (${scenarioName}, ${modeLabel})`;
     const renderRow = stats => (
         (() => {
-            const containsZero = Number.isFinite(stats.ciLow) && Number.isFinite(stats.ciHigh)
-                ? (stats.ciLow <= 0 && stats.ciHigh >= 0 ? 'Yes' : 'No')
+            const excludesZero = Number.isFinite(stats.ciLow) && Number.isFinite(stats.ciHigh)
+                ? (stats.ciLow > 0 || stats.ciHigh < 0 ? 'Yes' : 'No')
                 : 'NA';
             return (
-        `<tr>` +
-        `<td><strong>${escapeHtml(stats.hypothesis)}</strong></td>` +
-        `<td>p=${fmtP(stats.p)}</td>` +
-        `<td>99% CI for ${escapeHtml(stats.contrastLabel)}: ` +
-        `[${fmtPercentSigned(stats.ciLow, 2)}, ${fmtPercentSigned(stats.ciHigh, 2)}]</td>` +
-        `<td>${containsZero}</td>` +
-        `</tr>`
+                `<tr>` +
+                `<td><strong>${escapeHtml(stats.hypothesis)}</strong></td>` +
+                `<td>p=${fmtP(stats.p)}</td>` +
+                `<td>99% CI for ${escapeHtml(stats.contrastLabel)}: ` +
+                `[${fmtPercentSigned(stats.ciLow, 2)}, ${fmtPercentSigned(stats.ciHigh, 2)}]</td>` +
+                `<td>${excludesZero}</td>` +
+                `</tr>`
             );
         })()
     );
@@ -843,7 +843,7 @@ function renderScenarioImprovementStats(containerEl, sc, targets, trialVse) {
     const renderTable = rows => (
         `<div class="scenario-stats-table-wrap">` +
         `<table class="scenario-stats-table">` +
-        `<thead><tr><th>Matchup</th><th>p value</th><th>99% CI</th><th>CI contains 0</th></tr></thead>` +
+        `<thead><tr><th>Matchup</th><th>p value</th><th>99% CI</th><th>CI does not contain 0 (Sufficient Evidence)</th></tr></thead>` +
         `<tbody>${rows.join('')}</tbody>` +
         `</table>` +
         `</div>`
@@ -880,7 +880,7 @@ function renderScenarioImprovementStats(containerEl, sc, targets, trialVse) {
     }
 
     containerEl.innerHTML = [
-        '<div class="scenario-stats-title">Directional trial tests (one-sided p, 99% CI)</div>',
+        '<div class="scenario-stats-title">Directional trial tests (one-sided p, 99% CI). If the CI does not contain 0, we can be 99% confident that the effect is in the hypothesized direction in the simulation scenario. Otherwise, there is not sufficient evidence to support the hypothesis.</div>',
         sections.join(''),
     ].join('');
 }
