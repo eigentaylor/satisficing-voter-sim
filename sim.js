@@ -485,6 +485,7 @@ function buildMethods(enabled, options = {}) {
 let simAborted = false;
 let isSimRunning = false;
 let simResultsByMode = { honest: null, strategic: null };
+let hasStaleViewData = false;
 let activeViewMode = 'honest';
 let activeParamsKey = null;
 
@@ -2250,8 +2251,7 @@ function cacheKeyForParams(params) {
 }
 
 function clearInMemoryResults() {
-    simResultsByMode.honest = null;
-    simResultsByMode.strategic = null;
+    hasStaleViewData = Boolean(simResultsByMode.honest || simResultsByMode.strategic);
     activeParamsKey = null;
 }
 
@@ -2278,9 +2278,17 @@ function updateModeSwitcherUI() {
     strategicBtn.classList.toggle('ready', hasStrategic);
 
     if (isSimRunning) {
-        statusEl.textContent = 'Computing honest and strategic results from the same trial scenarios...';
+        if (hasHonest || hasStrategic) {
+            statusEl.textContent = 'Computing new results. You can still switch views while this run is in progress.';
+        } else {
+            statusEl.textContent = 'Computing honest and strategic results from the same trial scenarios...';
+        }
     } else if (hasHonest && hasStrategic) {
-        statusEl.textContent = 'Both views are loaded. Switching is instant.';
+        if (hasStaleViewData) {
+            statusEl.textContent = 'Showing previous-run views. Run simulation to refresh with current settings.';
+        } else {
+            statusEl.textContent = 'Both views are loaded. Switching is instant.';
+        }
     } else if (hasHonest || hasStrategic) {
         const missing = hasHonest ? 'strategic' : 'honest';
         statusEl.textContent = `Only one mode is loaded. Switching to ${missing} will auto-run in the background.`;
@@ -2507,6 +2515,7 @@ async function runSimulation(options = {}) {
     params.strategicMethods = buildMethods(params.enabledMethods, { useStrategy: true, strategyShare: params.strategyShare });
 
     if (useCache && !forceRecompute && activeParamsKey === params.cacheKey && simResultsByMode.honest && simResultsByMode.strategic) {
+        hasStaleViewData = false;
         activeViewMode = requestedMode || params.preferredMode || activeViewMode;
         if (!simResultsByMode[activeViewMode]) activeViewMode = 'honest';
         renderActiveMode(scrollToResults);
@@ -2538,6 +2547,7 @@ async function runSimulation(options = {}) {
                 || (isDefaultParamSet(params) ? loadBundleFromCache(`${CACHE_PREFIX}:default`) : null);
             if (cached) {
                 applyBundle(cached, params, params.cacheKey);
+                hasStaleViewData = false;
                 progressBar.style.width = '100%';
                 progressLabel.textContent = '100%';
                 statusEl.textContent = 'Loaded cached results.';
@@ -2549,6 +2559,7 @@ async function runSimulation(options = {}) {
                 const bundled = await loadBundledDefaultBundle(params.cacheKey);
                 if (bundled) {
                     applyBundle(bundled, params, params.cacheKey);
+                    hasStaleViewData = false;
                     progressBar.style.width = '100%';
                     progressLabel.textContent = '100%';
                     statusEl.textContent = 'Loaded bundled default results.';
@@ -2577,6 +2588,7 @@ async function runSimulation(options = {}) {
         simResultsByMode.honest = result.honest;
         simResultsByMode.strategic = result.strategic;
         activeParamsKey = params.cacheKey;
+        hasStaleViewData = false;
         activeViewMode = requestedMode || params.preferredMode || 'honest';
         if (!simResultsByMode[activeViewMode]) activeViewMode = 'honest';
 
