@@ -899,6 +899,44 @@ input[type="range"]::-webkit-slider-thumb:hover {
     margin-bottom: 0.25rem;
 }
 
+.scenario-stats-params {
+    color: #6d8389;
+    font-size: 0.66rem;
+    letter-spacing: 0.02em;
+    margin-bottom: 0.3rem;
+    font-variant-numeric: tabular-nums;
+}
+
+.scenario-ci-flag {
+    display: inline-block;
+    min-width: 2.1rem;
+    padding: 0.05rem 0.32rem;
+    border-radius: 999px;
+    font-size: 0.66rem;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    text-align: center;
+}
+
+.scenario-ci-flag-yes {
+    color: #9df2af;
+    background: rgba(50, 133, 70, 0.28);
+    border: 1px solid rgba(126, 214, 147, 0.44);
+}
+
+.scenario-ci-flag-no {
+    color: #ffb0b0;
+    background: rgba(143, 54, 54, 0.28);
+    border: 1px solid rgba(226, 131, 131, 0.45);
+}
+
+.scenario-ci-flag-na {
+    color: #98a8ac;
+    background: rgba(77, 92, 97, 0.25);
+    border: 1px solid rgba(124, 141, 146, 0.35);
+}
+
 .scenario-stats-divider {
     margin: 0.65rem 0 0.45rem;
     padding-top: 0.45rem;

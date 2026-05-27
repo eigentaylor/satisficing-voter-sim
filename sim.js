@@ -488,6 +488,7 @@ let simResultsByMode = { honest: null, strategic: null };
 let hasStaleViewData = false;
 let activeViewMode = 'honest';
 let activeParamsKey = null;
+let activeRunParams = null;
 
 const CACHE_VERSION = 3;
 const CACHE_PREFIX = `svs-cache-v${CACHE_VERSION}`;
@@ -928,6 +929,10 @@ function renderScenarioImprovementStats(containerEl, sc, targets, trialVse) {
     const approvalLines = [];
     const scenarioName = String(sc?.label || 'Scenario').split('\n')[0].trim();
     const modeLabel = currentVotingModeLabel();
+    const p = activeRunParams;
+    const paramsLine = p
+        ? `Voters ${p.nv} · Candidates ${p.nc} · Trials ${p.ntr} · Grid ${p.ng}×${p.ng} · ${p.nd}D space`
+        : 'Run parameters unavailable';
     const pluralityHeader = `Plurality comparisons (${scenarioName}, ${modeLabel})`;
     const approvalHeader = `Approval comparisons (${scenarioName}, ${modeLabel})`;
     const renderRow = stats => (
@@ -935,13 +940,18 @@ function renderScenarioImprovementStats(containerEl, sc, targets, trialVse) {
             const excludesZero = Number.isFinite(stats.ciLow) && Number.isFinite(stats.ciHigh)
                 ? (stats.ciLow > 0 || stats.ciHigh < 0 ? 'Yes' : 'No')
                 : 'NA';
+            const evidenceClass = excludesZero === 'Yes'
+                ? 'scenario-ci-flag-yes'
+                : excludesZero === 'No'
+                    ? 'scenario-ci-flag-no'
+                    : 'scenario-ci-flag-na';
             return (
                 `<tr>` +
                 `<td><strong>${escapeHtml(stats.hypothesis)}</strong></td>` +
                 `<td>p=${fmtP(stats.p)}</td>` +
                 `<td>99% CI for ${escapeHtml(stats.contrastLabel)}: ` +
                 `[${fmtPercentSigned(stats.ciLow, 2)}, ${fmtPercentSigned(stats.ciHigh, 2)}]</td>` +
-                `<td>${excludesZero}</td>` +
+                `<td><span class="scenario-ci-flag ${evidenceClass}">${excludesZero}</span></td>` +
                 `</tr>`
             );
         })()
@@ -973,6 +983,7 @@ function renderScenarioImprovementStats(containerEl, sc, targets, trialVse) {
         sections.push(
             '<div class="scenario-stats-group">' +
             `<div class="scenario-stats-group-label">${escapeHtml(pluralityHeader)}</div>` +
+            `<div class="scenario-stats-params">${escapeHtml(paramsLine)}</div>` +
             renderTable(pluralityLines) +
             '</div>'
         );
@@ -980,6 +991,7 @@ function renderScenarioImprovementStats(containerEl, sc, targets, trialVse) {
     if (approvalLines.length) {
         sections.push(
             `<div class="scenario-stats-divider" aria-hidden="true">${escapeHtml(approvalHeader)}</div>` +
+            `<div class="scenario-stats-params">${escapeHtml(paramsLine)}</div>` +
             '<div class="scenario-stats-group">' +
             renderTable(approvalLines) +
             '</div>'
@@ -2422,6 +2434,13 @@ function applyBundle(bundle, params, cacheKey) {
     const strategic = deserializeModeResult(bundle?.modes?.strategic);
     simResultsByMode.honest = honest;
     simResultsByMode.strategic = strategic;
+    activeRunParams = {
+        nv: Number(bundle?.params?.nv ?? params?.nv),
+        nc: Number(bundle?.params?.nc ?? params?.nc),
+        ntr: Number(bundle?.params?.ntr ?? params?.ntr),
+        ng: Number(bundle?.params?.ng ?? params?.ng),
+        nd: Number(bundle?.params?.nd ?? params?.nd),
+    };
     activeParamsKey = cacheKey;
 
     const preferred = params.requestedMode || params.preferredMode || 'honest';
@@ -2509,6 +2528,13 @@ async function runSimulation(options = {}) {
     updateModeSwitcherUI();
 
     const params = getParams();
+    activeRunParams = {
+        nv: params.nv,
+        nc: params.nc,
+        ntr: params.ntr,
+        ng: params.ng,
+        nd: params.nd,
+    };
     params.requestedMode = requestedMode;
     params.cacheKey = cacheKeyForParams(params);
     params.honestMethods = buildMethods(params.enabledMethods, { useStrategy: false, strategyShare: params.strategyShare });
