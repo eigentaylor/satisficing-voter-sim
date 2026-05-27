@@ -91,6 +91,14 @@
                     <label>Spatial dimensions <span id="nd-val" class="val-badge">2</span></label>
                     <input type="range" id="nd" min="1" max="4" step="1" value="2" />
                 </div>
+                <div class="control-group">
+                    <label for="norm">Distance norm</label>
+                    <select id="norm" aria-label="Distance norm for utility">
+                        <option value="l2" selected>L_2 (Euclidean)</option>
+                        <option value="l1">L_1 (Manhattan)</option>
+                        <option value="linf">L_inf (Chebyshev)</option>
+                    </select>
+                </div>
             </div>
 
             <div class="methods-toggle">
@@ -300,7 +308,8 @@
                 <p>
                     Voters and candidates are placed uniformly at random in $[-1,1]^d$,
                     where $d$ is the selected spatial dimension.
-                    True utility is $u_i(c) = -\|v_i - p_c\|^2$ — negative squared distance.
+                    True utility is $u_i(c) = -\|v_i - p_c\|_\nu^2$ — negative squared distance
+                    under the selected norm ($\nu\in\{1,2,\infty\}$).
                     The utility-maximising candidate is $c^* = \arg\max_c \frac{1}{n}\sum_i u_i(c)$.
                 </p>
             </details>

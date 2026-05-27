@@ -37,15 +37,28 @@ const METHOD_COLORS = {
 
 // ── Core simulation utilities ─────────────────────────────────────────────────
 
-/** True utilities: (nv × nc) matrix, u[i][c] = -||v_i - p_c||^2 */
-function makeElection(nv, nc, nd = 2) {
+/** True utilities: (nv × nc) matrix, u[i][c] = -||v_i - p_c||_norm^2 */
+function makeElection(nv, nc, nd = 2, norm = 'l2') {
+    const normKey = String(norm || 'l2').toLowerCase();
+    const useL1 = normKey === 'l1';
+    const useLinf = normKey === 'linf';
     const v = Array.from({ length: nv }, () => Array.from({ length: nd }, () => rng() * 2 - 1));
     const c = Array.from({ length: nc }, () => Array.from({ length: nd }, () => rng() * 2 - 1));
     const u = Array.from({ length: nv }, (_, i) =>
         Array.from({ length: nc }, (_, j) => {
-            let d = 0;
-            for (let k = 0; k < nd; k++) d += (v[i][k] - c[j][k]) ** 2;
-            return -d;
+            let dist;
+            if (useL1) {
+                dist = 0;
+                for (let k = 0; k < nd; k++) dist += Math.abs(v[i][k] - c[j][k]);
+            } else if (useLinf) {
+                dist = 0;
+                for (let k = 0; k < nd; k++) dist = Math.max(dist, Math.abs(v[i][k] - c[j][k]));
+            } else {
+                let sumSq = 0;
+                for (let k = 0; k < nd; k++) sumSq += (v[i][k] - c[j][k]) ** 2;
+                dist = Math.sqrt(sumSq);
+            }
+            return -(dist * dist);
         })
     );
     return u;
@@ -490,7 +503,7 @@ let activeViewMode = 'honest';
 let activeParamsKey = null;
 let activeRunParams = null;
 
-const CACHE_VERSION = 3;
+const CACHE_VERSION = 4;
 const CACHE_PREFIX = `svs-cache-v${CACHE_VERSION}`;
 const CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const DEFAULT_BUNDLE_PATH = 'output/default-sim-cache.json';
@@ -688,7 +701,7 @@ function analyzeHypotheses(trialVse, tVals, lVals, methods) {
 }
 
 async function runGrid(params, onProgress) {
-    const { nv, nc, ntr, ng, nd, enabledMethods, honestMethods, strategicMethods, computeBoth } = params;
+    const { nv, nc, ntr, ng, nd, norm, enabledMethods, honestMethods, strategicMethods, computeBoth } = params;
     const methodNames = orderedEnabledMethods(enabledMethods);
     const tVals = linspace(0, 1, ng);
     const lVals = linspace(1 / nc, 1, ng);
@@ -731,7 +744,7 @@ async function runGrid(params, onProgress) {
 
             for (let tr = 0; tr < ntr; tr++) {
                 if (simAborted) return null;
-                const u = makeElection(nv, nc, nd);
+                const u = makeElection(nv, nc, nd, norm);
                 const pu = addNoise(u, t);
                 const cm = colMeans(u);
                 const swRand = cm.reduce((s, x) => s + x, 0) / nc;
@@ -859,6 +872,13 @@ function fmtPercentSigned(value, decimals = 2) {
     return `${sign}${(value * 100).toFixed(decimals)}%`;
 }
 
+function normLabel(norm) {
+    const key = String(norm || 'l2').toLowerCase();
+    if (key === 'l1') return 'L_1';
+    if (key === 'linf') return 'L_inf';
+    return 'L_2';
+}
+
 function percentTickLabel(value, decimals = 0) {
     const numeric = Number(value);
     if (!Number.isFinite(numeric)) return String(value);
@@ -931,7 +951,7 @@ function renderScenarioImprovementStats(containerEl, sc, targets, trialVse) {
     const modeLabel = currentVotingModeLabel();
     const p = activeRunParams;
     const paramsLine = p
-        ? `Voters ${p.nv} · Candidates ${p.nc} · Trials ${p.ntr} · Grid ${p.ng}×${p.ng} · ${p.nd}D space`
+        ? `Voters ${p.nv} · Candidates ${p.nc} · Trials ${p.ntr} · Grid ${p.ng}×${p.ng} · ${p.nd}D space · Norm ${normLabel(p.norm)}`
         : 'Run parameters unavailable';
     const pluralityHeader = `Plurality comparisons (${scenarioName}, ${modeLabel})`;
     const approvalHeader = `Approval comparisons (${scenarioName}, ${modeLabel})`;
@@ -2234,12 +2254,15 @@ function getEnabledMethods() {
 function getParams() {
     const preferredMode = document.getElementById('strategy-on')?.checked ? 'strategic' : 'honest';
     const enabledMethods = getEnabledMethods();
+    const normRaw = document.getElementById('norm')?.value || 'l2';
+    const norm = ['l1', 'l2', 'linf'].includes(normRaw) ? normRaw : 'l2';
     return {
         nv: +document.getElementById('nv').value,
         nc: +document.getElementById('nc').value,
         ntr: +document.getElementById('ntr').value,
         ng: +document.getElementById('ng').value,
         nd: +document.getElementById('nd').value,
+        norm,
         preferredMode,
         enabledMethods,
         strategyShare: 1.0,
@@ -2254,6 +2277,7 @@ function paramsSignature(params) {
         params.ntr,
         params.ng,
         params.nd,
+        params.norm,
         orderedEnabledMethods(params.enabledMethods).join(','),
     ].join('|');
 }
@@ -2346,6 +2370,7 @@ function setActiveViewMode(mode, options = {}) {
 
 function isDefaultParamSet(params) {
     if (params.nv !== 120 || params.nc !== 8 || params.ntr !== 200 || params.ng !== 8 || params.nd !== 2) return false;
+    if ((params.norm || 'l2') !== 'l2') return false;
     const defaults = {
         Plurality: true,
         Approval: true,
@@ -2370,6 +2395,7 @@ function saveBundleToCache(cacheKey, params) {
             ntr: params.ntr,
             ng: params.ng,
             nd: params.nd,
+            norm: params.norm,
             enabledMethods: params.enabledMethods,
         },
         modes: {
@@ -2400,6 +2426,7 @@ function exportCurrentCacheEntryFromMemory() {
             ntr: params.ntr,
             ng: params.ng,
             nd: params.nd,
+            norm: params.norm,
             enabledMethods: params.enabledMethods,
         },
         modes: {
@@ -2440,6 +2467,7 @@ function applyBundle(bundle, params, cacheKey) {
         ntr: Number(bundle?.params?.ntr ?? params?.ntr),
         ng: Number(bundle?.params?.ng ?? params?.ng),
         nd: Number(bundle?.params?.nd ?? params?.nd),
+        norm: String(bundle?.params?.norm ?? params?.norm ?? 'l2'),
     };
     activeParamsKey = cacheKey;
 
@@ -2534,6 +2562,7 @@ async function runSimulation(options = {}) {
         ntr: params.ntr,
         ng: params.ng,
         nd: params.nd,
+        norm: params.norm,
     };
     params.requestedMode = requestedMode;
     params.cacheKey = cacheKeyForParams(params);
@@ -2692,6 +2721,14 @@ document.addEventListener('DOMContentLoaded', () => {
             updateModeSwitcherUI();
         });
     });
+
+    const normSelect = document.getElementById('norm');
+    if (normSelect) {
+        normSelect.addEventListener('change', () => {
+            clearInMemoryResults();
+            updateModeSwitcherUI();
+        });
+    }
 
     updateModeSwitcherUI();
     void runSimulation({
