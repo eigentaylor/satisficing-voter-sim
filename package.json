@@ -1,0 +1,11 @@
+{
+    "name": "satisficing-voter-sim",
+    "version": "0.1.0",
+    "private": true,
+    "description": "Browser and Python tooling for the Satisficing Voter Model simulation.",
+    "scripts": {
+        "generate:default-cache": ".\\.venv\\Scripts\\python.exe scripts/generate_default_cache_browser.py",
+        "generate:default-cache:pretty": ".\\.venv\\Scripts\\python.exe scripts/generate_default_cache_browser.py --pretty",
+        "setup:playwright": ".\\.venv\\Scripts\\python.exe -m playwright install chromium"
+    }
+}

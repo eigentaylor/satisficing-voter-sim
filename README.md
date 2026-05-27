@@ -263,6 +263,49 @@ pip install -r requirements.txt
 python satisficing_sim_1.py
 ```
 
+### Generate Browser Default Cache Bundle
+
+To precompute the browser default cache file consumed by the web app preload path:
+
+1. Install Python dependencies:
+
+```bash
+pip install -r requirements.txt
+```
+
+1. Install Playwright browser once:
+
+```bash
+python -m playwright install chromium
+```
+
+1. Run the browser-driven cache generator:
+
+```bash
+python scripts/generate_default_cache_browser.py
+```
+
+Or use the npm task:
+
+```bash
+npm run generate:default-cache
+```
+
+This script starts a local `http-server` via `npx`, runs the simulation headlessly in Chromium, reads the generated localStorage cache entry, and writes:
+
+- `output/default-sim-cache.json`
+
+Optional flags:
+
+- `--timeout-seconds 300` (increase runtime cap for slower machines)
+- `--pretty` (human-readable JSON)
+- `--out output/default-sim-cache.json` (custom output path)
+
+Npm helpers:
+
+- `npm run setup:playwright`
+- `npm run generate:default-cache:pretty`
+
 Paired testing is controlled in `satisficing_sim_1.py` with:
 
 - `RUN_PAIRED_HYPOTHESIS_TESTS`

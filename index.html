@@ -53,7 +53,8 @@
                     <h3>⚡ Participation Friction &nbsp;<em>ℓ</em></h3>
                     <p>
                         Even a well-informed voter may not fill out their entire ballot, due to ballot fatigue.
-                        The energy parameter $\ell \in [0,1]$ controls what fraction of candidates each voter has the energy to vote for:
+                        The energy parameter $\ell \in [0,1]$ controls what fraction of candidates each voter has the
+                        energy to vote for:
                         $K = \max(1, \lceil \ell \cdot m \rceil)$.
                     </p>
                     <div class="formula">$$K = \max\!\left(1,\ \left\lceil \ell \cdot m \right\rceil\right)$$</div>
@@ -112,8 +113,6 @@
                 <div class="toggle-row">
                     <label class="toggle"><input type="checkbox" id="show-stars" /><span>Show tier stars on bar
                             charts</span></label>
-                    <label class="toggle"><input type="checkbox" id="strategy-on" /><span>Strategic Voting Enabled
-                            <br />(All voters strategic)</span></label>
                 </div>
             </div>
 
@@ -187,7 +186,8 @@
             <div class="tab-pane" id="tab-scenarios">
                 <p class="chart-desc">VSE at four specific $(t,\ell)$ scenarios.</p>
                 <p id="star-legend-scenarios" class="chart-desc star-legend" style="display:none">★ Tier rank legend:
-                    more stars = higher performance tier.</p>
+                    more stars = higher performance tier. Stars are decided using an automatic gap-threshold tier
+                    detection heuristic.</p>
                 <div class="chart-row stacked">
                     <div class="chart-wrap"><canvas id="chart-sc-1"></canvas></div>
                     <div class="chart-wrap"><canvas id="chart-sc-2"></canvas></div>
@@ -222,7 +222,8 @@
                     represents a different assumption about the voter population.
                 </p>
                 <p id="star-legend-weighted" class="chart-desc star-legend" style="display:none">★ Tier rank legend:
-                    more stars = higher performance tier.</p>
+                    more stars = higher performance tier. Stars are decided using an automatic gap-threshold tier
+                    detection heuristic.</p>
                 <div class="chart-row stacked">
                     <div class="chart-wrap"><canvas id="chart-w-1"></canvas></div>
                     <div class="chart-wrap"><canvas id="chart-w-2"></canvas></div>
@@ -375,7 +376,10 @@
                     model in which every voter uses method-specific tactical behavior.
                 </p>
                 <p>
-                    These strategies are based on the strategic model in Quinn's VSE model, mistakes could have been made in translation, so take results with a grain of salt. In particular, Approval, STAR, Score, and Condorcet appear to become near optimal under strategic voting in ideal conditions, which requires more investigation to verify is not a bug.
+                    These strategies are based on the strategic model in Quinn's VSE model, mistakes could have been
+                    made in translation, so take results with a grain of salt. In particular, Approval, STAR, Score, and
+                    Condorcet appear to become near optimal under strategic voting in ideal conditions, which requires
+                    more investigation to verify is not a bug.
                 </p>
                 <p>
                     This mode is useful for side-by-side comparison against the honest baseline. For technical details
@@ -387,6 +391,17 @@
         </section>
 
     </main>
+
+    <div id="mode-switcher" class="floating-mode-switcher" style="display:none"
+        aria-label="Simulation mode view switcher">
+        <div class="mode-switch-actions" role="tablist" aria-label="Select displayed mode">
+            <button id="mode-view-honest" class="mode-switch-btn" type="button" role="tab" aria-selected="true">Honest
+                View</button>
+            <button id="mode-view-strategic" class="mode-switch-btn" type="button" role="tab"
+                aria-selected="false">Strategic View</button>
+        </div>
+        <p id="mode-switch-status" class="mode-switch-status">Run simulation to load both views.</p>
+    </div>
 
     <footer>
         <p>

@@ -41,6 +41,7 @@ body {
     font-size: 15px;
     line-height: 1.65;
     min-height: 100vh;
+    padding-bottom: 6.5rem;
 }
 
 a {
@@ -858,7 +859,7 @@ input[type="range"]::-webkit-slider-thumb:hover {
     font-weight: 600;
 }
 
-.scenario-stats-group + .scenario-stats-group {
+.scenario-stats-group+.scenario-stats-group {
     margin-top: 0.55rem;
 }
 
@@ -1109,7 +1110,7 @@ details p {
 /* ── footer ── */
 footer {
     text-align: center;
-    padding: 2rem 1rem;
+    padding: 2rem 1rem 2.75rem;
     border-top: 1px solid var(--border);
     color: var(--muted);
     font-size: 0.85rem;
@@ -1122,6 +1123,81 @@ footer a {
 
 footer a:hover {
     text-decoration: underline;
+}
+
+.floating-mode-switcher {
+    position: fixed;
+    left: 50%;
+    bottom: 0.85rem;
+    transform: translateX(-50%);
+    width: min(96vw, 760px);
+    z-index: 35;
+    padding: 0.75rem 0.85rem;
+    border-radius: 14px;
+    border: 1px solid rgba(74, 184, 224, 0.28);
+    background: linear-gradient(180deg, rgba(20, 23, 30, 0.96), rgba(10, 11, 15, 0.96));
+    box-shadow: 0 14px 36px rgba(0, 0, 0, 0.42);
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.mode-switch-actions {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.mode-switch-btn {
+    flex: 1;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 0.5rem 0.6rem;
+    background: rgba(255, 255, 255, 0.03);
+    color: #ced8e3;
+    font-size: 0.88rem;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+    cursor: pointer;
+    transition: border-color 0.16s ease, background 0.16s ease, color 0.16s ease;
+}
+
+.mode-switch-btn:hover {
+    border-color: rgba(74, 184, 224, 0.72);
+    color: #e8f7ff;
+}
+
+.mode-switch-btn.ready {
+    border-color: rgba(78, 201, 106, 0.62);
+}
+
+.mode-switch-btn.active {
+    border-color: rgba(74, 184, 224, 0.85);
+    background: rgba(74, 184, 224, 0.2);
+    color: #f2fbff;
+}
+
+.mode-switch-status {
+    font-size: 0.8rem;
+    color: #9eaec2;
+    line-height: 1.35;
+    text-align: center;
+}
+
+@media (max-width: 640px) {
+    body {
+        padding-bottom: 8.75rem;
+    }
+
+    .floating-mode-switcher {
+        bottom: 0.5rem;
+        width: calc(100vw - 0.75rem);
+        border-radius: 12px;
+        padding: 0.6rem;
+    }
+
+    .mode-switch-actions {
+        flex-direction: column;
+    }
 }
 
 /* ── scrollbar ── */

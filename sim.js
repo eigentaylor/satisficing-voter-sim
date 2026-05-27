@@ -484,7 +484,14 @@ function buildMethods(enabled, options = {}) {
 
 let simAborted = false;
 let isSimRunning = false;
-let lastSimResult = null;
+let simResultsByMode = { honest: null, strategic: null };
+let activeViewMode = 'honest';
+let activeParamsKey = null;
+
+const CACHE_VERSION = 3;
+const CACHE_PREFIX = `svs-cache-v${CACHE_VERSION}`;
+const CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+const DEFAULT_BUNDLE_PATH = 'output/default-sim-cache.json';
 
 const HYPOTHESIS_ALPHA = 0.01;
 let hypothesisTableSort = { key: 'pooledMeanP', dir: 'asc' };
@@ -679,31 +686,46 @@ function analyzeHypotheses(trialVse, tVals, lVals, methods) {
 }
 
 async function runGrid(params, onProgress) {
-    const { nv, nc, ntr, ng, nd, methods } = params;
-    const methodNames = Object.keys(methods);
+    const { nv, nc, ntr, ng, nd, enabledMethods, honestMethods, strategicMethods, computeBoth } = params;
+    const methodNames = orderedEnabledMethods(enabledMethods);
     const tVals = linspace(0, 1, ng);
     const lVals = linspace(1 / nc, 1, ng);
-    const res = {};
-    for (const m of methodNames) res[m] = Array.from({ length: ng }, () => new Float64Array(ng));
-    const trialVse = {};
+    const resHonest = {};
+    const trialVseHonest = {};
+    const resStrategic = {};
+    const trialVseStrategic = {};
     for (const m of methodNames) {
-        trialVse[m] = Array.from({ length: ng }, () =>
+        resHonest[m] = Array.from({ length: ng }, () => new Float64Array(ng));
+        trialVseHonest[m] = Array.from({ length: ng }, () =>
             Array.from({ length: ng }, () => new Float64Array(ntr))
         );
+        if (computeBoth) {
+            resStrategic[m] = Array.from({ length: ng }, () => new Float64Array(ng));
+            trialVseStrategic[m] = Array.from({ length: ng }, () =>
+                Array.from({ length: ng }, () => new Float64Array(ntr))
+            );
+        }
     }
 
     simAborted = false;
-    const total = ng * ng;
-    let done = 0;
+    const gridTotal = ng * ng;
+    const workTotal = gridTotal * (computeBoth ? 2 : 1);
+    let gridDone = 0;
+    let workDone = 0;
     const t0 = performance.now();
+    let lastYield = t0;
 
     for (let ti = 0; ti < ng; ti++) {
         for (let li = 0; li < ng; li++) {
             if (simAborted) return null;
 
             const t = tVals[ti], l = lVals[li];
-            const acc = {};
-            for (const m of methodNames) acc[m] = 0;
+            const accHonest = {};
+            const accStrategic = {};
+            for (const m of methodNames) {
+                accHonest[m] = 0;
+                if (computeBoth) accStrategic[m] = 0;
+            }
 
             for (let tr = 0; tr < ntr; tr++) {
                 if (simAborted) return null;
@@ -712,26 +734,110 @@ async function runGrid(params, onProgress) {
                 const cm = colMeans(u);
                 const swRand = cm.reduce((s, x) => s + x, 0) / nc;
                 const swOpt = Math.max(...cm);
-                for (const [name, fn] of Object.entries(methods)) {
-                    const w = fn(pu, l);
-                    const vseVal = vse(cm[w], swRand, swOpt);
-                    acc[name] += vseVal;
-                    trialVse[name][li][ti][tr] = vseVal;
+                for (const name of methodNames) {
+                    const honestWinner = honestMethods[name](pu, l);
+                    const vseHonest = vse(cm[honestWinner], swRand, swOpt);
+                    accHonest[name] += vseHonest;
+                    trialVseHonest[name][li][ti][tr] = vseHonest;
+
+                    if (computeBoth) {
+                        const strategicWinner = strategicMethods[name](pu, l);
+                        const vseStrategic = vse(cm[strategicWinner], swRand, swOpt);
+                        accStrategic[name] += vseStrategic;
+                        trialVseStrategic[name][li][ti][tr] = vseStrategic;
+                    }
                 }
             }
 
-            for (const m of methodNames) res[m][li][ti] = acc[m] / ntr;
+            for (const m of methodNames) {
+                resHonest[m][li][ti] = accHonest[m] / ntr;
+                if (computeBoth) resStrategic[m][li][ti] = accStrategic[m] / ntr;
+            }
 
-            done++;
+            gridDone++;
+            workDone += computeBoth ? 2 : 1;
             const elapsed = (performance.now() - t0) / 1000;
-            const eta = (total - done) * (elapsed / done);
-            onProgress(done, total, elapsed, eta);
+            const eta = workDone > 0 ? (workTotal - workDone) * (elapsed / workDone) : 0;
+            onProgress(gridDone, gridTotal, elapsed, eta, workDone, workTotal);
 
-            // yield to browser every 4 grid points
-            if (done % 4 === 0) await sleep(0);
+            // Yield on elapsed frame budget instead of fixed iteration count.
+            const now = performance.now();
+            if (now - lastYield > 16) {
+                await sleep(0);
+                lastYield = now;
+            }
         }
     }
-    return { res, tVals, lVals, trialVse };
+
+    const enabledSubset = Object.fromEntries(methodNames.map(name => [name, true]));
+
+    const honest = {
+        res: resHonest,
+        tVals,
+        lVals,
+        trialVse: trialVseHonest,
+        methods: enabledSubset,
+        useStrategy: false,
+    };
+    const strategic = computeBoth
+        ? {
+            res: resStrategic,
+            tVals,
+            lVals,
+            trialVse: trialVseStrategic,
+            methods: enabledSubset,
+            useStrategy: true,
+        }
+        : null;
+    return { honest, strategic };
+}
+
+function rowsToSerializable(rows) {
+    return rows.map(row => Array.from(row));
+}
+
+function rowsFromSerializable(rows) {
+    return rows.map(row => Float64Array.from(row));
+}
+
+function trialCubeToSerializable(cube) {
+    return cube.map(row => row.map(col => Array.from(col)));
+}
+
+function trialCubeFromSerializable(cube) {
+    return cube.map(row => row.map(col => Float64Array.from(col)));
+}
+
+function serializeModeResult(state) {
+    if (!state) return null;
+    const res = {};
+    for (const [method, rows] of Object.entries(state.res || {})) res[method] = rowsToSerializable(rows);
+    const trialVse = {};
+    for (const [method, cube] of Object.entries(state.trialVse || {})) trialVse[method] = trialCubeToSerializable(cube);
+    return {
+        res,
+        tVals: Array.from(state.tVals || []),
+        lVals: Array.from(state.lVals || []),
+        trialVse,
+        methods: state.methods,
+        useStrategy: Boolean(state.useStrategy),
+    };
+}
+
+function deserializeModeResult(raw) {
+    if (!raw) return null;
+    const res = {};
+    for (const [method, rows] of Object.entries(raw.res || {})) res[method] = rowsFromSerializable(rows);
+    const trialVse = {};
+    for (const [method, cube] of Object.entries(raw.trialVse || {})) trialVse[method] = trialCubeFromSerializable(cube);
+    return {
+        res,
+        tVals: Array.from(raw.tVals || []),
+        lVals: Array.from(raw.lVals || []),
+        trialVse,
+        methods: raw.methods || {},
+        useStrategy: Boolean(raw.useStrategy),
+    };
 }
 
 function fmtP(p) {
@@ -1375,8 +1481,7 @@ const TOP_TIER_STARS_PLUGIN = {
 Chart.register(DARK_PLUGIN, BAR_VALUE_LABELS_PLUGIN, TOP_TIER_STARS_PLUGIN, HUNDRED_PERCENT_LINE_PLUGIN);
 
 function currentVotingModeLabel() {
-    const useStrategy = document.getElementById('strategy-on')?.checked ?? false;
-    return useStrategy ? 'Strategic voting' : 'Honest voting';
+    return activeViewMode === 'strategic' ? 'Strategic voting' : 'Honest voting';
 }
 
 function composeChartTitle(title) {
@@ -2101,9 +2206,8 @@ function plotApprovalDiff(res, tVals, lVals, methods) {
 
 // ── UI wiring ─────────────────────────────────────────────────────────────────
 
-function getParams() {
-    const useStrategy = document.getElementById('strategy-on')?.checked ?? false;
-    const enabledMethods = {
+function getEnabledMethods() {
+    return {
         Plurality: document.getElementById('m-plurality').checked,
         RCV: document.getElementById('m-irv').checked,
         Borda: document.getElementById('m-borda').checked,
@@ -2112,16 +2216,224 @@ function getParams() {
         STAR: document.getElementById('m-star').checked,
         Condorcet: document.getElementById('m-condorcet').checked,
     };
+}
+
+function getParams() {
+    const preferredMode = document.getElementById('strategy-on')?.checked ? 'strategic' : 'honest';
+    const enabledMethods = getEnabledMethods();
     return {
         nv: +document.getElementById('nv').value,
         nc: +document.getElementById('nc').value,
         ntr: +document.getElementById('ntr').value,
         ng: +document.getElementById('ng').value,
         nd: +document.getElementById('nd').value,
-        useStrategy,
+        preferredMode,
+        enabledMethods,
         strategyShare: 1.0,
-        methods: buildMethods(enabledMethods, { useStrategy, strategyShare: 1.0 }),
+        computeBoth: true,
     };
+}
+
+function paramsSignature(params) {
+    return [
+        params.nv,
+        params.nc,
+        params.ntr,
+        params.ng,
+        params.nd,
+        orderedEnabledMethods(params.enabledMethods).join(','),
+    ].join('|');
+}
+
+function cacheKeyForParams(params) {
+    return `${CACHE_PREFIX}:${paramsSignature(params)}`;
+}
+
+function clearInMemoryResults() {
+    simResultsByMode.honest = null;
+    simResultsByMode.strategic = null;
+    activeParamsKey = null;
+}
+
+function getActiveViewState() {
+    return simResultsByMode[activeViewMode] || simResultsByMode.honest || simResultsByMode.strategic || null;
+}
+
+function updateModeSwitcherUI() {
+    const wrap = document.getElementById('mode-switcher');
+    const honestBtn = document.getElementById('mode-view-honest');
+    const strategicBtn = document.getElementById('mode-view-strategic');
+    const statusEl = document.getElementById('mode-switch-status');
+    if (!wrap || !honestBtn || !strategicBtn || !statusEl) return;
+
+    wrap.style.display = 'flex';
+    honestBtn.classList.toggle('active', activeViewMode === 'honest');
+    strategicBtn.classList.toggle('active', activeViewMode === 'strategic');
+    honestBtn.setAttribute('aria-selected', activeViewMode === 'honest' ? 'true' : 'false');
+    strategicBtn.setAttribute('aria-selected', activeViewMode === 'strategic' ? 'true' : 'false');
+
+    const hasHonest = Boolean(simResultsByMode.honest);
+    const hasStrategic = Boolean(simResultsByMode.strategic);
+    honestBtn.classList.toggle('ready', hasHonest);
+    strategicBtn.classList.toggle('ready', hasStrategic);
+
+    if (isSimRunning) {
+        statusEl.textContent = 'Computing honest and strategic results from the same trial scenarios...';
+    } else if (hasHonest && hasStrategic) {
+        statusEl.textContent = 'Both views are loaded. Switching is instant.';
+    } else if (hasHonest || hasStrategic) {
+        const missing = hasHonest ? 'strategic' : 'honest';
+        statusEl.textContent = `Only one mode is loaded. Switching to ${missing} will auto-run in the background.`;
+    } else {
+        statusEl.textContent = 'Run simulation to load both views.';
+    }
+}
+
+function ensureResultsVisible(scroll = false) {
+    const resultsEl = document.getElementById('results');
+    resultsEl.style.display = 'block';
+    if (scroll) resultsEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function renderActiveMode(scroll = false) {
+    const state = getActiveViewState();
+    if (!state) return;
+    renderChartsFromState(state);
+    ensureResultsVisible(scroll);
+}
+
+function setActiveViewMode(mode, options = {}) {
+    if (mode !== 'honest' && mode !== 'strategic') return;
+    const { autoRunMissing = true } = options;
+    activeViewMode = mode;
+
+    const strategyToggle = document.getElementById('strategy-on');
+    if (strategyToggle) strategyToggle.checked = activeViewMode === 'strategic';
+
+    if (simResultsByMode[mode]) {
+        renderActiveMode(false);
+    } else if (autoRunMissing && !isSimRunning) {
+        void runSimulation({
+            requestedMode: mode,
+            background: true,
+            useCache: true,
+            scrollToResults: false,
+        });
+    }
+
+    updateModeSwitcherUI();
+}
+
+function isDefaultParamSet(params) {
+    if (params.nv !== 120 || params.nc !== 8 || params.ntr !== 200 || params.ng !== 8 || params.nd !== 2) return false;
+    const defaults = {
+        Plurality: true,
+        Approval: true,
+        RCV: true,
+        STAR: true,
+        Condorcet: true,
+        Score: false,
+        Borda: false,
+    };
+    return Object.keys(defaults).every(k => params.enabledMethods[k] === defaults[k]);
+}
+
+function saveBundleToCache(cacheKey, params) {
+    const payload = {
+        version: CACHE_VERSION,
+        createdAt: Date.now(),
+        cacheKey,
+        signature: paramsSignature(params),
+        params: {
+            nv: params.nv,
+            nc: params.nc,
+            ntr: params.ntr,
+            ng: params.ng,
+            nd: params.nd,
+            enabledMethods: params.enabledMethods,
+        },
+        modes: {
+            honest: serializeModeResult(simResultsByMode.honest),
+            strategic: serializeModeResult(simResultsByMode.strategic),
+        },
+    };
+    try {
+        localStorage.setItem(cacheKey, JSON.stringify(payload));
+        if (isDefaultParamSet(params)) localStorage.setItem(`${CACHE_PREFIX}:default`, JSON.stringify(payload));
+    } catch (err) {
+        console.warn('Could not persist simulation cache:', err);
+    }
+}
+
+function exportCurrentCacheEntryFromMemory() {
+    if (!simResultsByMode.honest || !simResultsByMode.strategic) return null;
+    const params = getParams();
+    const key = cacheKeyForParams(params);
+    return {
+        version: CACHE_VERSION,
+        createdAt: Date.now(),
+        cacheKey: key,
+        signature: paramsSignature(params),
+        params: {
+            nv: params.nv,
+            nc: params.nc,
+            ntr: params.ntr,
+            ng: params.ng,
+            nd: params.nd,
+            enabledMethods: params.enabledMethods,
+        },
+        modes: {
+            honest: serializeModeResult(simResultsByMode.honest),
+            strategic: serializeModeResult(simResultsByMode.strategic),
+        },
+    };
+}
+
+// Export hook for tooling (e.g., scripts/generate_default_cache_browser.py).
+window.exportCurrentCacheEntryFromMemory = exportCurrentCacheEntryFromMemory;
+
+function loadBundleFromCache(cacheKey) {
+    try {
+        const raw = localStorage.getItem(cacheKey);
+        if (!raw) return null;
+        const parsed = JSON.parse(raw);
+        if (!parsed || parsed.version !== CACHE_VERSION) return null;
+        if (!Number.isFinite(parsed.createdAt) || (Date.now() - parsed.createdAt) > CACHE_TTL_MS) {
+            localStorage.removeItem(cacheKey);
+            return null;
+        }
+        return parsed;
+    } catch (err) {
+        console.warn('Could not parse simulation cache:', err);
+        return null;
+    }
+}
+
+function applyBundle(bundle, params, cacheKey) {
+    const honest = deserializeModeResult(bundle?.modes?.honest);
+    const strategic = deserializeModeResult(bundle?.modes?.strategic);
+    simResultsByMode.honest = honest;
+    simResultsByMode.strategic = strategic;
+    activeParamsKey = cacheKey;
+
+    const preferred = params.requestedMode || params.preferredMode || 'honest';
+    activeViewMode = simResultsByMode[preferred] ? preferred : (simResultsByMode.honest ? 'honest' : 'strategic');
+    updateModeSwitcherUI();
+    renderActiveMode(false);
+}
+
+async function loadBundledDefaultBundle(cacheKey) {
+    try {
+        const resp = await fetch(DEFAULT_BUNDLE_PATH, { cache: 'no-cache' });
+        if (!resp.ok) return null;
+        const data = await resp.json();
+        if (!data || data.version !== CACHE_VERSION) return null;
+        if (data.cacheKey === cacheKey) return data;
+        if (data.entries && data.entries[cacheKey]) return data.entries[cacheKey];
+        return null;
+    } catch {
+        return null;
+    }
 }
 
 function isMobileLikeViewport() {
@@ -2157,15 +2469,168 @@ function renderChartsFromState(state) {
     updateStarLegendVisibility();
 }
 
+async function runSimulation(options = {}) {
+    const {
+        requestedMode = null,
+        background = false,
+        useCache = true,
+        scrollToResults = true,
+        forceRecompute = false,
+    } = options;
+
+    if (isSimRunning) return;
+
+    simAborted = true;
+    await sleep(10);
+    simAborted = false;
+    isSimRunning = true;
+
+    rng = mulberry32(42);
+
+    const btn = document.getElementById('run-btn');
+    const statusEl = document.getElementById('sim-status');
+    const progressBar = document.getElementById('progress-bar');
+    const progressLabel = document.getElementById('progress-label');
+
+    btn.disabled = true;
+    btn.textContent = background ? '⏳ Syncing modes…' : '⏳ Running…';
+    statusEl.textContent = background ? 'Computing missing mode in background…' : 'Initialising…';
+    progressLabel.textContent = '0%';
+    progressBar.style.width = '0%';
+    setRunning(true);
+    updateModeSwitcherUI();
+
+    const params = getParams();
+    params.requestedMode = requestedMode;
+    params.cacheKey = cacheKeyForParams(params);
+    params.honestMethods = buildMethods(params.enabledMethods, { useStrategy: false, strategyShare: params.strategyShare });
+    params.strategicMethods = buildMethods(params.enabledMethods, { useStrategy: true, strategyShare: params.strategyShare });
+
+    if (useCache && !forceRecompute && activeParamsKey === params.cacheKey && simResultsByMode.honest && simResultsByMode.strategic) {
+        activeViewMode = requestedMode || params.preferredMode || activeViewMode;
+        if (!simResultsByMode[activeViewMode]) activeViewMode = 'honest';
+        renderActiveMode(scrollToResults);
+        progressBar.style.width = '100%';
+        progressLabel.textContent = '100%';
+        statusEl.textContent = 'Loaded in-memory results.';
+        updateModeSwitcherUI();
+        isSimRunning = false;
+        btn.disabled = false;
+        btn.textContent = '▶ Run Simulation';
+        setRunning(false);
+        return;
+    }
+
+    if (!Object.keys(params.honestMethods).length) {
+        statusEl.textContent = 'Please enable at least one method.';
+        btn.disabled = false;
+        btn.textContent = '▶ Run Simulation';
+        progressLabel.textContent = 'Ready';
+        isSimRunning = false;
+        setRunning(false);
+        updateModeSwitcherUI();
+        return;
+    }
+
+    try {
+        if (useCache && !forceRecompute) {
+            const cached = loadBundleFromCache(params.cacheKey)
+                || (isDefaultParamSet(params) ? loadBundleFromCache(`${CACHE_PREFIX}:default`) : null);
+            if (cached) {
+                applyBundle(cached, params, params.cacheKey);
+                progressBar.style.width = '100%';
+                progressLabel.textContent = '100%';
+                statusEl.textContent = 'Loaded cached results.';
+                if (scrollToResults) ensureResultsVisible(true);
+                return;
+            }
+
+            if (isDefaultParamSet(params)) {
+                const bundled = await loadBundledDefaultBundle(params.cacheKey);
+                if (bundled) {
+                    applyBundle(bundled, params, params.cacheKey);
+                    progressBar.style.width = '100%';
+                    progressLabel.textContent = '100%';
+                    statusEl.textContent = 'Loaded bundled default results.';
+                    if (scrollToResults) ensureResultsVisible(true);
+                    return;
+                }
+            }
+        }
+
+        const result = await runGrid(params, (done, total, elapsed, eta, workDone, workTotal) => {
+            const pct = (100 * workDone / workTotal).toFixed(0);
+            progressBar.style.width = pct + '%';
+            progressLabel.textContent = `${pct}%`;
+            statusEl.textContent = `${done}/${total} grid points · ${elapsed.toFixed(1)}s elapsed · ETA ${eta.toFixed(0)}s`;
+        });
+
+        if (!result) {
+            progressLabel.textContent = 'Cancelled';
+            statusEl.textContent = 'Simulation cancelled.';
+            return;
+        }
+
+        statusEl.textContent = 'Rendering plots…';
+        await sleep(0);
+
+        simResultsByMode.honest = result.honest;
+        simResultsByMode.strategic = result.strategic;
+        activeParamsKey = params.cacheKey;
+        activeViewMode = requestedMode || params.preferredMode || 'honest';
+        if (!simResultsByMode[activeViewMode]) activeViewMode = 'honest';
+
+        renderActiveMode(scrollToResults);
+        updateModeSwitcherUI();
+        saveBundleToCache(params.cacheKey, params);
+
+        progressBar.style.width = '100%';
+        progressLabel.textContent = '100%';
+        statusEl.textContent = `Done (both modes). ${params.ng * params.ng} grid points × ${params.ntr} trials each.`;
+    } catch (err) {
+        statusEl.textContent = 'Simulation failed. Check console for details.';
+        console.error(err);
+    } finally {
+        simAborted = false;
+        isSimRunning = false;
+        btn.disabled = false;
+        btn.textContent = '▶ Run Simulation';
+        setRunning(false);
+        updateModeSwitcherUI();
+    }
+}
+
 // Sync sliders to badges
 document.addEventListener('DOMContentLoaded', () => {
     const starsToggle = document.getElementById('show-stars');
+    const strategyToggle = document.getElementById('strategy-on');
+    const honestViewBtn = document.getElementById('mode-view-honest');
+    const strategicViewBtn = document.getElementById('mode-view-strategic');
+
     if (starsToggle) {
         // Desktop default on, mobile default off.
         starsToggle.checked = !isMobileLikeViewport();
         starsToggle.addEventListener('change', () => {
             updateStarLegendVisibility();
-            if (lastSimResult) renderChartsFromState(lastSimResult);
+            if (getActiveViewState()) renderActiveMode(false);
+        });
+    }
+
+    if (strategyToggle) {
+        strategyToggle.addEventListener('change', () => {
+            const selectedMode = strategyToggle.checked ? 'strategic' : 'honest';
+            setActiveViewMode(selectedMode, { autoRunMissing: false });
+        });
+    }
+
+    if (honestViewBtn) {
+        honestViewBtn.addEventListener('click', () => {
+            setActiveViewMode('honest', { autoRunMissing: true });
+        });
+    }
+    if (strategicViewBtn) {
+        strategicViewBtn.addEventListener('click', () => {
+            setActiveViewMode('strategic', { autoRunMissing: true });
         });
     }
 
@@ -2174,7 +2639,29 @@ document.addEventListener('DOMContentLoaded', () => {
         const badge = document.getElementById(id + '-val');
         if (slider && badge) {
             slider.addEventListener('input', () => { badge.textContent = slider.value; });
+            slider.addEventListener('change', () => {
+                clearInMemoryResults();
+                updateModeSwitcherUI();
+            });
         }
+    });
+
+    ['m-plurality', 'm-approval', 'm-irv', 'm-star', 'm-condorcet', 'm-score', 'm-borda'].forEach(id => {
+        const input = document.getElementById(id);
+        if (!input) return;
+        input.addEventListener('change', () => {
+            clearInMemoryResults();
+            updateModeSwitcherUI();
+        });
+    });
+
+    updateModeSwitcherUI();
+    void runSimulation({
+        requestedMode: activeViewMode,
+        background: true,
+        useCache: true,
+        scrollToResults: false,
+        forceRecompute: false,
     });
 
     updateStarLegendVisibility();
@@ -2220,73 +2707,11 @@ document.getElementById('cancel-btn').addEventListener('click', requestCancel);
 // Run button
 document.getElementById('run-btn').addEventListener('click', async () => {
     if (isSimRunning) return;
-
-    simAborted = true;  // abort any running sim
-    await sleep(10);
-    simAborted = false;
-    isSimRunning = true;
-
-    rng = mulberry32(42);  // reset RNG for reproducibility
-
-    const btn = document.getElementById('run-btn');
-    const statusEl = document.getElementById('sim-status');
-    const progressBar = document.getElementById('progress-bar');
-    const progressLabel = document.getElementById('progress-label');
-
-    btn.disabled = true;
-    btn.textContent = '⏳ Running…';
-    statusEl.textContent = 'Initialising…';
-    progressLabel.textContent = '0%';
-    progressBar.style.width = '0%';
-    setRunning(true);
-
-    const params = getParams();
-    if (Object.keys(params.methods).length === 0) {
-        statusEl.textContent = 'Please enable at least one method.';
-        btn.disabled = false; btn.textContent = '▶ Run Simulation';
-        progressLabel.textContent = 'Ready';
-        isSimRunning = false;
-        setRunning(false);
-        return;
-    }
-
-    try {
-        const result = await runGrid(params, (done, total, elapsed, eta) => {
-            const pct = (100 * done / total).toFixed(0);
-            progressBar.style.width = pct + '%';
-            progressLabel.textContent = `${pct}%`;
-            statusEl.textContent = `${done}/${total} grid points · ${elapsed.toFixed(1)}s elapsed · ETA ${eta.toFixed(0)}s`;
-        });
-
-        if (!result) {
-            progressLabel.textContent = 'Cancelled';
-            statusEl.textContent = 'Simulation cancelled.';
-            return;
-        }
-
-        const { res, tVals, lVals, trialVse } = result;
-
-        statusEl.textContent = 'Rendering plots…';
-        await sleep(0);
-
-        lastSimResult = { res, tVals, lVals, trialVse, methods: params.methods, useStrategy: params.useStrategy };
-        renderChartsFromState(lastSimResult);
-
-        document.getElementById('results').style.display = 'block';
-        document.getElementById('results').scrollIntoView({ behavior: 'smooth', block: 'start' });
-
-        progressBar.style.width = '100%';
-        progressLabel.textContent = '100%';
-        const modeLabel = params.useStrategy ? 'strategic mode' : 'honest mode';
-        statusEl.textContent = `Done (${modeLabel}). ${params.ng * params.ng} grid points × ${params.ntr} trials each.`;
-    } catch (err) {
-        statusEl.textContent = 'Simulation failed. Check console for details.';
-        console.error(err);
-    } finally {
-        simAborted = false;
-        isSimRunning = false;
-        btn.disabled = false;
-        btn.textContent = '▶ Run Simulation';
-        setRunning(false);
-    }
+    await runSimulation({
+        requestedMode: activeViewMode,
+        background: false,
+        useCache: true,
+        scrollToResults: true,
+        forceRecompute: true,
+    });
 });
