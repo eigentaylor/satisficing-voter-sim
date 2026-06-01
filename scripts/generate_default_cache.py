@@ -188,7 +188,7 @@ def build_entry(
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Generate default browser cache bundle JSON.")
-    parser.add_argument("--nv", type=int, default=120)
+    parser.add_argument("--nv", type=int, default=101)
     parser.add_argument("--nc", type=int, default=8)
     parser.add_argument("--ntr", type=int, default=200)
     parser.add_argument("--ng", type=int, default=8)

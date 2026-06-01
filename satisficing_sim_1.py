@@ -26,7 +26,7 @@ warnings.filterwarnings('ignore')
 rng = np.random.default_rng(42)
 
 # ── params ────────────────────────────────────────────────────────────────────
-N_VOTERS = 120
+N_VOTERS = 101
 N_CANDS  = 8          # N candidates → K ∈ {1,2,..,N} for l in 10 steps
 N_TRIALS = 200
 N_DIM    = 2

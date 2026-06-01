@@ -2369,7 +2369,7 @@ function setActiveViewMode(mode, options = {}) {
 }
 
 function isDefaultParamSet(params) {
-    if (params.nv !== 120 || params.nc !== 8 || params.ntr !== 200 || params.ng !== 8 || params.nd !== 2) return false;
+    if (params.nv !== 101 || params.nc !== 8 || params.ntr !== 200 || params.ng !== 8 || params.nd !== 2) return false;
     if ((params.norm || 'l2') !== 'l2') return false;
     const defaults = {
         Plurality: true,
