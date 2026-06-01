@@ -913,7 +913,7 @@ function percentTickLabelUpTo100(value, decimals = 0) {
     return `${(capped * 100).toFixed(decimals)}%`;
 }
 
-function scenarioDirectionalStats(trialVse, li, ti, methodA, methodB) {
+function scenarioDirectionalStats(trialVse, li, ti, methodA, methodB, forceDirection = false) {
     const aTrials = trialVse?.[methodA]?.[li]?.[ti];
     const bTrials = trialVse?.[methodB]?.[li]?.[ti];
     if (!aTrials || !bTrials) return null;
@@ -938,6 +938,29 @@ function scenarioDirectionalStats(trialVse, li, ti, methodA, methodB) {
         raw[i] = d;
         rawSum += d;
     }
+
+    const z99TwoSided = 2.5758293035489004;
+    const twoSidedP = z => {
+        if (!Number.isFinite(z)) return Number.isNaN(z) ? NaN : 0;
+        return Math.max(0, Math.min(1, 2 * (1 - normalCdf(Math.abs(z)))));
+    };
+
+    if (forceDirection) {
+        // Always test methodA > methodB; do not auto-orient.
+        const test = oneSidedMeanDiffTest(raw);
+        const ciLow = Number.isFinite(test.se) ? test.mean - z99TwoSided * test.se : NaN;
+        const ciHigh = Number.isFinite(test.se) ? test.mean + z99TwoSided * test.se : NaN;
+        return {
+            n,
+            hypothesis: `${methodA} > ${methodB}`,
+            contrastLabel: `${methodA} - ${methodB}`,
+            mean: test.mean,
+            p: twoSidedP(test.z),
+            ciLow,
+            ciHigh,
+        };
+    }
+
     const rawMean = rawSum / n;
     const preferA = rawMean >= 0;
     const lead = preferA ? methodA : methodB;
@@ -948,7 +971,6 @@ function scenarioDirectionalStats(trialVse, li, ti, methodA, methodB) {
     for (let i = 0; i < n; i++) oriented[i] = direction * raw[i];
 
     const test = oneSidedMeanDiffTest(oriented);
-    const z99TwoSided = 2.5758293035489004;
     const ciLow = Number.isFinite(test.se) ? test.mean - z99TwoSided * test.se : NaN;
     const ciHigh = Number.isFinite(test.se) ? test.mean + z99TwoSided * test.se : NaN;
 
@@ -957,10 +979,109 @@ function scenarioDirectionalStats(trialVse, li, ti, methodA, methodB) {
         hypothesis: `${lead} > ${lag}`,
         contrastLabel: `${lead} - ${lag}`,
         mean: test.mean,
-        p: test.p,
+        p: twoSidedP(test.z),
         ciLow,
         ciHigh,
     };
+}
+
+function renderScenarioPairwiseGrid(containerEl, sc, methods, trialVse) {
+    if (!containerEl) return;
+
+    const allMethods = methods.filter(m => trialVse?.[m]);
+    if (allMethods.length < 2) {
+        containerEl.innerHTML = '<div class="scenario-stats-note">Trial-level directional tests unavailable for this scenario.</div>';
+        return;
+    }
+
+    const colHeaders = allMethods.map(m => `<th>${escapeHtml(m)}</th>`).join('');
+    const bodyRows = allMethods.map(rowMethod => {
+        const cellsHtml = allMethods.map(colMethod => {
+            if (rowMethod === colMethod) {
+                return '<td class="pairwise-diag">-</td>';
+            }
+            const stats = scenarioDirectionalStats(trialVse, sc.li, sc.ti, rowMethod, colMethod, true);
+            if (!stats || !Number.isFinite(stats.p)) {
+                return `<td class="pairwise-cell-slot"><button type="button" class="pairwise-cell sig-mixed" disabled>N/A</button><div class="pairwise-hover-template" hidden></div></td>`;
+            }
+            // forceDirection=true: CI is for (row - col). Evidence for row>col iff ciLow > 0.
+            const excludesZero = Number.isFinite(stats.ciLow) && Number.isFinite(stats.ciHigh)
+                ? stats.ciLow > 0
+                : null;
+            const cellClass = excludesZero === true ? 'sig-yes' : excludesZero === false ? 'sig-no' : 'sig-mixed';
+            const shortLabel = excludesZero === true ? 'Yes' : 'No';
+            const scenarioLabel = String(sc?.label || '').replace('\n', ' · ');
+            const hoverHtml =
+                `<div class="pairwise-hover-title">${escapeHtml(stats.hypothesis)}</div>` +
+                `<div class="pairwise-hover-scenario">${escapeHtml(scenarioLabel)}</div>` +
+                `<div class="pairwise-hover-body">${excludesZero ? 'CI excludes 0 — sufficient evidence.' : 'CI contains 0 — not sufficient evidence.'}</div>` +
+                `<div class="pairwise-hover-metrics">` +
+                `<span>Two-sided p: ${fmtP(stats.p)}</span>` +
+                `<span>99% CI (${escapeHtml(stats.contrastLabel)}): [${fmtPercentSigned(stats.ciLow, 2)}, ${fmtPercentSigned(stats.ciHigh, 2)}]</span>` +
+                `<span>n = ${stats.n} trials</span>` +
+                `</div>`;
+            const detailText = `${stats.hypothesis}. p=${fmtP(stats.p)}, 99% CI: [${fmtPercentSigned(stats.ciLow, 2)}, ${fmtPercentSigned(stats.ciHigh, 2)}].`;
+            return (
+                `<td class="pairwise-cell-slot">` +
+                `<button type="button" class="pairwise-cell ${cellClass}" data-detail="${escapeHtml(detailText)}">${shortLabel}</button>` +
+                `<div class="pairwise-hover-template" hidden>${hoverHtml}</div>` +
+                `</td>`
+            );
+        }).join('');
+        return `<tr><th>${escapeHtml(rowMethod)}</th>${cellsHtml}</tr>`;
+    }).join('');
+
+    containerEl.innerHTML =
+        `<div class="scenario-matrix-wrap">` +
+        `<div class="scenario-stats-title">Sufficient evidence that row method &gt; column method? (99% CI excludes 0) — hover or tap a cell for p-value and CI.</div>` +
+        `<div class="matrix-scroll">` +
+        `<table class="pairwise-matrix scenario-matrix"><thead><tr><th>Row &gt; Col</th>${colHeaders}</tr></thead><tbody>${bodyRows}</tbody></table>` +
+        `</div>` +
+        `<div class="hypothesis-hover-card scenario-hover-card" aria-hidden="true"></div>` +
+        `</div>`;
+
+    const hoverCardEl = containerEl.querySelector('.scenario-hover-card');
+    const matrixWrapEl = containerEl.querySelector('.scenario-matrix-wrap');
+
+    const positionHoverCard = cell => {
+        if (!hoverCardEl) return;
+        hoverCardEl.style.left = '0px';
+        hoverCardEl.style.top = '0px';
+        hoverCardEl.classList.add('is-visible');
+        const rect = cell.getBoundingClientRect();
+        const cardRect = hoverCardEl.getBoundingClientRect();
+        const gap = 12;
+        const maxLeft = Math.max(gap, window.innerWidth - cardRect.width - gap);
+        const centeredLeft = rect.left + rect.width / 2 - cardRect.width / 2;
+        const left = Math.min(Math.max(gap, centeredLeft), maxLeft);
+        const placeAbove = rect.top >= cardRect.height + gap * 2;
+        const top = placeAbove ? rect.top - cardRect.height - gap : rect.bottom + gap;
+        hoverCardEl.style.left = `${left}px`;
+        hoverCardEl.style.top = `${Math.max(gap, top)}px`;
+        hoverCardEl.setAttribute('aria-hidden', 'false');
+    };
+    const hideHoverCard = () => {
+        if (!hoverCardEl) return;
+        hoverCardEl.classList.remove('is-visible');
+        hoverCardEl.setAttribute('aria-hidden', 'true');
+    };
+
+    containerEl.querySelectorAll('.pairwise-cell').forEach(cell => {
+        const update = () => {
+            if (!hoverCardEl) return;
+            const template = cell.parentElement?.querySelector('.pairwise-hover-template');
+            if (!template) return;
+            hoverCardEl.innerHTML = template.innerHTML;
+            positionHoverCard(cell);
+        };
+        cell.addEventListener('mouseenter', update);
+        cell.addEventListener('focus', update);
+        cell.addEventListener('click', update);
+        cell.addEventListener('mouseleave', hideHoverCard);
+        cell.addEventListener('blur', hideHoverCard);
+    });
+
+    if (matrixWrapEl) matrixWrapEl.addEventListener('mouseleave', hideHoverCard);
 }
 
 function renderScenarioImprovementStats(containerEl, sc, targets, trialVse) {
@@ -1039,7 +1160,7 @@ function renderScenarioImprovementStats(containerEl, sc, targets, trialVse) {
     }
 
     containerEl.innerHTML = [
-        '<div class="scenario-stats-title">Directional trial tests (one-sided p, 99% CI). If the CI (confidence interval) does not contain 0, we can be 99% confident that the effect is in the hypothesized direction in the simulation scenario. Otherwise, there is not sufficient evidence to support the hypothesis. A confidence interval such as [1%, 5%] indicates that we can be 99% confident that the true underlying difference is between 1% and 5%.</div>',
+        '<div class="scenario-stats-title">Directional trial tests (two-sided p, 99% CI). If the CI (confidence interval) does not contain 0, we can be 99% confident that the effect is in the hypothesized direction in the simulation scenario. Otherwise, there is not sufficient evidence to support the hypothesis. A confidence interval such as [1%, 5%] indicates that we can be 99% confident that the true underlying difference is between 1% and 5%.</div>',
         sections.join(''),
     ].join('');
 }
@@ -1901,7 +2022,7 @@ function scenarioSpecs(tVals, lVals, includeId = false) {
     return specs.map((s, i) => ({ ...s, id: `chart-sc-${i + 1}` }));
 }
 
-function plotScenarios(res, tVals, lVals, methods) {
+function plotScenarios(res, tVals, lVals, methods, trialVse = null) {
     const showStars = shouldShowTierStars();
     const scenarios = scenarioSpecs(tVals, lVals, true);
     const names = Object.keys(methods);
@@ -1921,6 +2042,9 @@ function plotScenarios(res, tVals, lVals, methods) {
             { enabled: showStars, alpha: 0.5, tiered: true, maxStars: 3, minTopHeadroom: 0.18 },
             scenarioValues
         ));
+
+        const statsEl = document.getElementById(`${sc.id}-stats`);
+        renderScenarioPairwiseGrid(statsEl, sc, names, trialVse);
     }
 }
 
@@ -2393,7 +2517,7 @@ function setActiveViewMode(mode, options = {}) {
 }
 
 function isDefaultParamSet(params) {
-    if (params.nv !== 99 || params.nc !== 8 || params.ntr !== 200 || params.ng !== 8 || params.nd !== 2) return false;
+    if (params.nv !== 85 || params.nc !== 8 || params.ntr !== 200 || params.ng !== 8 || params.nd !== 2) return false;
     if ((params.norm || 'l2') !== 'l2') return false;
     if (params.runoffApprovalTrueUtilityRunoff !== true) return false;
     const defaults = {
@@ -2543,7 +2667,7 @@ function renderChartsFromState(state) {
     plotSlices(res, tVals, lVals, methods);
     buildHeatmapContainer('heatmap-container', res, methods, viridis, 0, 1, null);
     plotRobustness(res, tVals, lVals, methods);
-    plotScenarios(res, tVals, lVals, methods);
+    plotScenarios(res, tVals, lVals, methods, state.trialVse);
     plotWeighted(res, tVals, lVals, methods);
     plotWeightedOverallImprovement(res, tVals, lVals, methods);
     plotScenarioOverallImprovement(res, tVals, lVals, methods, state.trialVse);

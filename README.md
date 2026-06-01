@@ -176,7 +176,7 @@ The results on this page use the following defaults, which can be adjusted with 
 
 | Parameter | Default | Description |
 |---|---|---|
-| Voters $n$ | 101 | Sampled per trial |
+| Voters $n$ | 85 | Sampled per trial |
 | Candidates $m$ | 6 | Placed in $[-1,1]^2$ |
 | Trials | 250 | Per $(t, \ell)$ grid point |
 | Grid | $12 \times 12$ | Over $t \in [0,1]$, $\ell \in [1/m, 1]$ |

@@ -72,8 +72,8 @@
             <h2>Parameters</h2>
             <div class="controls-grid">
                 <div class="control-group">
-                    <label>Voters <span id="nv-val" class="val-badge">101</span></label>
-                    <input type="range" id="nv" min="30" max="300" step="30" value="101" />
+                    <label>Voters <span id="nv-val" class="val-badge">85</span></label>
+                    <input type="range" id="nv" min="31" max="301" step="2" value="85" />
                 </div>
                 <div class="control-group">
                     <label>Candidates <span id="nc-val" class="val-badge">8</span></label>
@@ -208,9 +208,13 @@
                     detection heuristic.</p>
                 <div class="chart-row stacked">
                     <div class="chart-wrap"><canvas id="chart-sc-1"></canvas></div>
+                    <div id="chart-sc-1-stats" class="scenario-between-stats" aria-live="polite"></div>
                     <div class="chart-wrap"><canvas id="chart-sc-2"></canvas></div>
+                    <div id="chart-sc-2-stats" class="scenario-between-stats" aria-live="polite"></div>
                     <div class="chart-wrap"><canvas id="chart-sc-3"></canvas></div>
+                    <div id="chart-sc-3-stats" class="scenario-between-stats" aria-live="polite"></div>
                     <div class="chart-wrap"><canvas id="chart-sc-4"></canvas></div>
+                    <div id="chart-sc-4-stats" class="scenario-between-stats" aria-live="polite"></div>
                 </div>
             </div>
 

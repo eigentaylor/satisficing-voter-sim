@@ -640,6 +640,12 @@ input[type="range"]::-webkit-slider-thumb:hover {
     font-weight: 700;
     letter-spacing: 0.02em;
     color: #ffffff;
+    margin-bottom: 0.2rem;
+}
+
+.pairwise-hover-scenario {
+    font-size: 0.74rem;
+    color: #8faab8;
     margin-bottom: 0.35rem;
 }
 
@@ -873,7 +879,9 @@ input[type="range"]::-webkit-slider-thumb:hover {
 }
 
 .scenario-stats-table {
-    width: 100%;
+    width: fit-content;
+    min-width: 720px;
+    margin: 0 auto;
     border-collapse: collapse;
     font-size: 0.75rem;
     color: #b5c3c6;
@@ -968,6 +976,21 @@ input[type="range"]::-webkit-slider-thumb:hover {
     font-size: 0.75rem;
 }
 
+.scenario-matrix-wrap {
+    margin-top: 0.5rem;
+}
+
+.scenario-matrix {
+    min-width: unset;
+    width: auto;
+    margin: 0 auto;
+}
+
+.scenario-matrix th:first-child {
+    text-align: left;
+    padding-left: 0.5rem;
+}
+
 @media (max-width: 700px) {
     .chart-row.stacked .chart-wrap {
         min-height: 300px;
@@ -975,6 +998,10 @@ input[type="range"]::-webkit-slider-thumb:hover {
 
     .chart-row.stacked .chart-wrap canvas {
         height: 260px !important;
+    }
+
+    .scenario-stats-table {
+        min-width: 560px;
     }
 }
 
