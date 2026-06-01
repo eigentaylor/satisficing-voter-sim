@@ -940,10 +940,6 @@ function scenarioDirectionalStats(trialVse, li, ti, methodA, methodB, forceDirec
     }
 
     const z99TwoSided = 2.5758293035489004;
-    const twoSidedP = z => {
-        if (!Number.isFinite(z)) return Number.isNaN(z) ? NaN : 0;
-        return Math.max(0, Math.min(1, 2 * (1 - normalCdf(Math.abs(z)))));
-    };
 
     if (forceDirection) {
         // Always test methodA > methodB; do not auto-orient.
@@ -955,7 +951,7 @@ function scenarioDirectionalStats(trialVse, li, ti, methodA, methodB, forceDirec
             hypothesis: `${methodA} > ${methodB}`,
             contrastLabel: `${methodA} - ${methodB}`,
             mean: test.mean,
-            p: twoSidedP(test.z),
+            p: test.p,
             ciLow,
             ciHigh,
         };
@@ -979,7 +975,7 @@ function scenarioDirectionalStats(trialVse, li, ti, methodA, methodB, forceDirec
         hypothesis: `${lead} > ${lag}`,
         contrastLabel: `${lead} - ${lag}`,
         mean: test.mean,
-        p: twoSidedP(test.z),
+        p: test.p,
         ciLow,
         ciHigh,
     };
@@ -1016,7 +1012,7 @@ function renderScenarioPairwiseGrid(containerEl, sc, methods, trialVse) {
                 `<div class="pairwise-hover-scenario">${escapeHtml(scenarioLabel)}</div>` +
                 `<div class="pairwise-hover-body">${excludesZero ? 'CI excludes 0 — sufficient evidence.' : 'CI contains 0 — not sufficient evidence.'}</div>` +
                 `<div class="pairwise-hover-metrics">` +
-                `<span>Two-sided p: ${fmtP(stats.p)}</span>` +
+                `<span>One-sided p: ${fmtP(stats.p)}</span>` +
                 `<span>99% CI (${escapeHtml(stats.contrastLabel)}): [${fmtPercentSigned(stats.ciLow, 2)}, ${fmtPercentSigned(stats.ciHigh, 2)}]</span>` +
                 `<span>n = ${stats.n} trials</span>` +
                 `</div>`;
@@ -1160,7 +1156,7 @@ function renderScenarioImprovementStats(containerEl, sc, targets, trialVse) {
     }
 
     containerEl.innerHTML = [
-        '<div class="scenario-stats-title">Directional trial tests (two-sided p, 99% CI). If the CI (confidence interval) does not contain 0, we can be 99% confident that the effect is in the hypothesized direction in the simulation scenario. Otherwise, there is not sufficient evidence to support the hypothesis. A confidence interval such as [1%, 5%] indicates that we can be 99% confident that the true underlying difference is between 1% and 5%.</div>',
+        '<div class="scenario-stats-title">Directional trial tests (one-sided p, 99% CI). If the CI (confidence interval) does not contain 0, we can be 99% confident that the effect is in the hypothesized direction in the simulation scenario. Otherwise, there is not sufficient evidence to support the hypothesis. A confidence interval such as [1%, 5%] indicates that we can be 99% confident that the true underlying difference is between 1% and 5%.</div>',
         sections.join(''),
     ].join('');
 }
