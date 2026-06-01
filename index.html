@@ -107,6 +107,8 @@
                     <label class="toggle"><input type="checkbox" id="m-plurality"
                             checked /><span>Plurality</span></label>
                     <label class="toggle"><input type="checkbox" id="m-approval" checked /><span>Approval</span></label>
+                    <label class="toggle"><input type="checkbox" id="m-runoff-approval" checked /><span>Runoff
+                            Approval</span></label>
                     <label class="toggle"><input type="checkbox" id="m-irv" checked /><span>RCV</span></label>
                     <label class="toggle"><input type="checkbox" id="m-star" checked /><span>STAR</span></label>
                     <label class="toggle"><input type="checkbox" id="m-condorcet"
@@ -121,6 +123,14 @@
                 <div class="toggle-row">
                     <label class="toggle"><input type="checkbox" id="show-stars" /><span>Show tier stars on bar
                             charts</span></label>
+                </div>
+            </div>
+
+            <div class="display-toggle">
+                <h3>Runoff Approval options</h3>
+                <div class="toggle-row">
+                    <label class="toggle"><input type="checkbox" id="ra-true-runoff" checked /><span>Use perfect
+                            underlying utilities in the Runoff Approval finalist runoff (default)</span></label>
                 </div>
             </div>
 
@@ -334,10 +344,17 @@
                 <p>
                     <strong>Plurality:</strong> vote for the single top perceived candidate.<br />
                     <strong>RCV / Borda / Condorcet:</strong> rank the considered set in order of $\tilde{u}_i$.<br />
-                    <strong>Score / STAR:</strong> compute full-ballot 0-5 scores from all candidates, then keep
-                    those scores only for the considered set and give 0 to the rest.<br />
+                    <strong>Score / STAR:</strong> for each voter, first take that voter's perceived utilities
+                    $\tilde{u}_i(c)$ over <em>all</em> candidates and find
+                    $\tilde{u}_{\min} = \min_c \tilde{u}_i(c)$ and
+                    $\tilde{u}_{\max} = \max_c \tilde{u}_i(c)$. Then project each considered candidate to a
+                    0-5 score by voter-specific linear rescaling:
+                    $$s_i(c)=5\cdot\frac{\tilde{u}_i(c)-\tilde{u}_{\min}}{\tilde{u}_{\max}-\tilde{u}_{\min}}.$$
+                    Candidates outside the considered set get score 0. (If all perceived utilities tie, considered
+                    candidates are assigned 5.)<br />
                     <strong>Approval:</strong> approve candidates in the considered set whose $\tilde{u}_i$ exceeds
-                    the voter's global personal mean (computed over all $m$ candidates).
+                    the voter's global personal mean (computed over all $m$ candidates).<br />
+                    <strong>Runoff Approval:</strong> uses the exact same approval ballot as Approval.
                 </p>
             </details>
             <details>
@@ -345,6 +362,12 @@
                 <p>
                     <strong>Plurality:</strong> most top-choice votes wins.<br />
                     <strong>Approval:</strong> most approvals wins.<br />
+                    <strong>Runoff Approval:</strong> top two by approval totals advance; in the runoff, each voter
+                    supports whichever finalist they prefer between those two, and the finalist with more runoff
+                    support wins. By default, this finalist comparison uses <em>true</em> underlying utilities as a
+                    separate-election approximation: with only two finalists, voters can usually determine with near
+                    certainty which finalist they actually prefer. Turn off the toggle above to use perceived
+                    utilities instead.<br />
                     <strong>Borda:</strong> ranked candidates get $K, K-1, \ldots, 1$ points (unranked get 0); highest
                     total wins.<br />
                     <strong>Score:</strong> highest total 0-5 score wins.<br />
@@ -375,6 +398,20 @@
                     the ballot is identical to the full-energy ballot. For a typical voter
                     $\mathbb{E}[k_i^*] \approx m/2$, so approval "saturates" near $\ell = 0.5$ on average.
                     Ranking/scoring methods lose information monotonically as $\ell$ decreases.
+                </p>
+            </details>
+            <details>
+                <summary>Runoff Approval Utilities</summary>
+                <p>
+                    By default we use the voter's true utilities to determine their vote in the runoff. This is
+                    done for runoff approval but not STAR for a simple reason. Unlike in STAR where the runoff is
+                    automatically calculated by the ballots submitted by the voters, the runoff under Approval must be
+                    done at a later date. It seems far more plausible that voters can be 100% sure which candidate they
+                    truly prefer if they have only two candidates to compare, and time after the initial voting allows
+                    them to make this determination accurately.
+                </p>
+                <p>
+                    This setting can be toggled in the simulation options.
                 </p>
             </details>
             <details>

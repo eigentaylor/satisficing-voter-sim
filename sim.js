@@ -28,6 +28,7 @@ function randn() {
 const METHOD_COLORS = {
     Plurality: '#e05555',
     Approval: '#4ec96a',
+    'Runoff Approval': '#2fa07c',
     RCV: '#e09944',
     STAR: '#4ab8e0',
     Condorcet: '#9b6be0',
@@ -301,7 +302,24 @@ function approvalWinner(pu, l, useStrategy = false, strategyShare = 1.0) {
     for (let i = 0; i < nv; i++) {
         for (let c = 0; c < nc; c++) if (approvals[i][c]) totals[c]++;
     }
-    return { winner: argmax(totals), polls };
+    return { winner: argmax(totals), polls, approvals, totals };
+}
+
+function runoffApprovalWinner(pu, l, useStrategy = false, strategyShare = 1.0, useTrueUtilitiesRunoff = true, u = null) {
+    const { polls, totals } = approvalWinner(pu, l, useStrategy, strategyShare);
+    const nc = totals.length;
+    const sorted = Array.from({ length: nc }, (_, i) => i).sort((a, b) => totals[b] - totals[a]);
+    const [f1, f2] = sorted;
+    if (f2 === undefined) return { winner: f1, polls };
+
+    const runoffMatrix = (useTrueUtilitiesRunoff && Array.isArray(u) && u.length === pu.length) ? u : pu;
+    let w1 = 0;
+    let w2 = 0;
+    for (let i = 0; i < runoffMatrix.length; i++) {
+        if (runoffMatrix[i][f1] > runoffMatrix[i][f2]) w1++;
+        else if (runoffMatrix[i][f2] > runoffMatrix[i][f1]) w2++;
+    }
+    return { winner: w1 >= w2 ? f1 : f2, polls };
 }
 
 function bordaWinner(pu, l, useStrategy = false, strategyShare = 1.0) {
@@ -479,14 +497,16 @@ function irvWinner(pu, l, useStrategy = false, strategyShare = 1.0) {
 function buildMethods(enabled, options = {}) {
     const useStrategy = Boolean(options.useStrategy);
     const strategyShare = Number.isFinite(options.strategyShare) ? options.strategyShare : 1.0;
+    const useTrueUtilitiesRunoff = options.useTrueUtilitiesRunoff !== false;
     const all = {
-        Plurality: (pu, l) => pluralityWinner(pu, useStrategy, strategyShare).winner,
-        Approval: (pu, l) => approvalWinner(pu, l, useStrategy, strategyShare).winner,
-        RCV: (pu, l) => irvWinner(pu, l, useStrategy, strategyShare).winner,
-        STAR: (pu, l) => starWinner(pu, l, useStrategy, strategyShare).winner,
-        Condorcet: (pu, l) => condorcetWinner(pu, l, useStrategy, strategyShare).winner,
-        Score: (pu, l) => scoreWinner(pu, l, useStrategy, strategyShare).winner,
-        Borda: (pu, l) => bordaWinner(pu, l, useStrategy, strategyShare).winner,
+        Plurality: (pu, l, u) => pluralityWinner(pu, useStrategy, strategyShare).winner,
+        Approval: (pu, l, u) => approvalWinner(pu, l, useStrategy, strategyShare).winner,
+        'Runoff Approval': (pu, l, u) => runoffApprovalWinner(pu, l, useStrategy, strategyShare, useTrueUtilitiesRunoff, u).winner,
+        RCV: (pu, l, u) => irvWinner(pu, l, useStrategy, strategyShare).winner,
+        STAR: (pu, l, u) => starWinner(pu, l, useStrategy, strategyShare).winner,
+        Condorcet: (pu, l, u) => condorcetWinner(pu, l, useStrategy, strategyShare).winner,
+        Score: (pu, l, u) => scoreWinner(pu, l, useStrategy, strategyShare).winner,
+        Borda: (pu, l, u) => bordaWinner(pu, l, useStrategy, strategyShare).winner,
     };
     const out = {};
     for (const k of Object.keys(all)) if (enabled[k]) out[k] = all[k];
@@ -750,13 +770,13 @@ async function runGrid(params, onProgress) {
                 const swRand = cm.reduce((s, x) => s + x, 0) / nc;
                 const swOpt = Math.max(...cm);
                 for (const name of methodNames) {
-                    const honestWinner = honestMethods[name](pu, l);
+                    const honestWinner = honestMethods[name](pu, l, u);
                     const vseHonest = vse(cm[honestWinner], swRand, swOpt);
                     accHonest[name] += vseHonest;
                     trialVseHonest[name][li][ti][tr] = vseHonest;
 
                     if (computeBoth) {
-                        const strategicWinner = strategicMethods[name](pu, l);
+                        const strategicWinner = strategicMethods[name](pu, l, u);
                         const vseStrategic = vse(cm[strategicWinner], swRand, swOpt);
                         accStrategic[name] += vseStrategic;
                         trialVseStrategic[name][li][ti][tr] = vseStrategic;
@@ -1927,7 +1947,7 @@ function plotScenarioOverallImprovement(res, tVals, lVals, methods, trialVse = n
                 !hasApproval ? 'Approval' : null,
             ].filter(Boolean);
             if (targets.length === 0) {
-                emptyMsg.textContent = 'Enable at least one reform target (RCV, Borda, Score, STAR, or Condorcet) to view scenario improvement.';
+                emptyMsg.textContent = 'Enable at least one reform target (Runoff Approval, RCV, Borda, Score, STAR, or Condorcet) to view scenario improvement.';
             } else if (missing.length > 0) {
                 emptyMsg.textContent = `Enable ${missing.join(' and ')} to view scenario improvement vs baseline methods.`;
             }
@@ -2131,7 +2151,7 @@ function plotWeightedOverallImprovement(res, tVals, lVals, methods) {
                 !hasApproval ? 'Approval' : null,
             ].filter(Boolean);
             if (targets.length === 0) {
-                emptyMsg.textContent = 'Enable at least one reform target (RCV, Borda, Score, STAR, or Condorcet) to view weighted improvement.';
+                emptyMsg.textContent = 'Enable at least one reform target (Runoff Approval, RCV, Borda, Score, STAR, or Condorcet) to view weighted improvement.';
             } else if (missing.length > 0) {
                 emptyMsg.textContent = `Enable ${missing.join(' and ')} to view weighted improvement vs baseline methods.`;
             }
@@ -2242,6 +2262,7 @@ function plotApprovalDiff(res, tVals, lVals, methods) {
 function getEnabledMethods() {
     return {
         Plurality: document.getElementById('m-plurality').checked,
+        'Runoff Approval': document.getElementById('m-runoff-approval').checked,
         RCV: document.getElementById('m-irv').checked,
         Borda: document.getElementById('m-borda').checked,
         Score: document.getElementById('m-score').checked,
@@ -2256,6 +2277,7 @@ function getParams() {
     const enabledMethods = getEnabledMethods();
     const normRaw = document.getElementById('norm')?.value || 'l2';
     const norm = ['l1', 'l2', 'linf'].includes(normRaw) ? normRaw : 'l2';
+    const runoffApprovalTrueUtilityRunoff = document.getElementById('ra-true-runoff')?.checked !== false;
     return {
         nv: +document.getElementById('nv').value,
         nc: +document.getElementById('nc').value,
@@ -2263,6 +2285,7 @@ function getParams() {
         ng: +document.getElementById('ng').value,
         nd: +document.getElementById('nd').value,
         norm,
+        runoffApprovalTrueUtilityRunoff,
         preferredMode,
         enabledMethods,
         strategyShare: 1.0,
@@ -2278,6 +2301,7 @@ function paramsSignature(params) {
         params.ng,
         params.nd,
         params.norm,
+        params.runoffApprovalTrueUtilityRunoff ? 'raTrueRunoff=1' : 'raTrueRunoff=0',
         orderedEnabledMethods(params.enabledMethods).join(','),
     ].join('|');
 }
@@ -2369,11 +2393,13 @@ function setActiveViewMode(mode, options = {}) {
 }
 
 function isDefaultParamSet(params) {
-    if (params.nv !== 101 || params.nc !== 8 || params.ntr !== 200 || params.ng !== 8 || params.nd !== 2) return false;
+    if (params.nv !== 90 || params.nc !== 8 || params.ntr !== 200 || params.ng !== 8 || params.nd !== 2) return false;
     if ((params.norm || 'l2') !== 'l2') return false;
+    if (params.runoffApprovalTrueUtilityRunoff !== true) return false;
     const defaults = {
         Plurality: true,
         Approval: true,
+        'Runoff Approval': true,
         RCV: true,
         STAR: true,
         Condorcet: true,
@@ -2396,6 +2422,7 @@ function saveBundleToCache(cacheKey, params) {
             ng: params.ng,
             nd: params.nd,
             norm: params.norm,
+            runoffApprovalTrueUtilityRunoff: params.runoffApprovalTrueUtilityRunoff,
             enabledMethods: params.enabledMethods,
         },
         modes: {
@@ -2427,6 +2454,7 @@ function exportCurrentCacheEntryFromMemory() {
             ng: params.ng,
             nd: params.nd,
             norm: params.norm,
+            runoffApprovalTrueUtilityRunoff: params.runoffApprovalTrueUtilityRunoff,
             enabledMethods: params.enabledMethods,
         },
         modes: {
@@ -2566,8 +2594,16 @@ async function runSimulation(options = {}) {
     };
     params.requestedMode = requestedMode;
     params.cacheKey = cacheKeyForParams(params);
-    params.honestMethods = buildMethods(params.enabledMethods, { useStrategy: false, strategyShare: params.strategyShare });
-    params.strategicMethods = buildMethods(params.enabledMethods, { useStrategy: true, strategyShare: params.strategyShare });
+    params.honestMethods = buildMethods(params.enabledMethods, {
+        useStrategy: false,
+        strategyShare: params.strategyShare,
+        useTrueUtilitiesRunoff: params.runoffApprovalTrueUtilityRunoff,
+    });
+    params.strategicMethods = buildMethods(params.enabledMethods, {
+        useStrategy: true,
+        strategyShare: params.strategyShare,
+        useTrueUtilitiesRunoff: params.runoffApprovalTrueUtilityRunoff,
+    });
 
     if (useCache && !forceRecompute && activeParamsKey === params.cacheKey && simResultsByMode.honest && simResultsByMode.strategic) {
         hasStaleViewData = false;
@@ -2713,7 +2749,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    ['m-plurality', 'm-approval', 'm-irv', 'm-star', 'm-condorcet', 'm-score', 'm-borda'].forEach(id => {
+    ['m-plurality', 'm-approval', 'm-runoff-approval', 'm-irv', 'm-star', 'm-condorcet', 'm-score', 'm-borda'].forEach(id => {
         const input = document.getElementById(id);
         if (!input) return;
         input.addEventListener('change', () => {
@@ -2725,6 +2761,14 @@ document.addEventListener('DOMContentLoaded', () => {
     const normSelect = document.getElementById('norm');
     if (normSelect) {
         normSelect.addEventListener('change', () => {
+            clearInMemoryResults();
+            updateModeSwitcherUI();
+        });
+    }
+
+    const runoffSourceToggle = document.getElementById('ra-true-runoff');
+    if (runoffSourceToggle) {
+        runoffSourceToggle.addEventListener('change', () => {
             clearInMemoryResults();
             updateModeSwitcherUI();
         });
