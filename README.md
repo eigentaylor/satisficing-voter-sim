@@ -76,7 +76,7 @@ $$A_i = \left\\{c \in \mathcal{S}_i : \tilde{u}_i(c) > \bar{\tilde{u}}_i\right\\
 
 Note the threshold $\bar{\tilde{u}}_i$ is computed over *all* $m$ candidates, not just the considered set. This is essential: the threshold is a stable feature of the voter's perceived preference landscape, not a moving target that changes with energy level. If $A_i = \emptyset$, the voter approves their single top-ranked candidate (a minimal fallback equivalent to plurality).
 
-**Runoff Approval.** Uses the same approval ballot as Approval (same threshold rule, same fallback). The difference is only in winner counting: after approval totals are computed, the top two candidates advance to a runoff.
+**Approval Top 2.** Uses the same approval ballot as Approval (same threshold rule, same fallback). The difference is only in winner counting: after approval totals are computed, the top two candidates advance to a runoff.
 
 ---
 
@@ -88,7 +88,7 @@ After ballots are constructed, winners are counted as follows.
 
 **Approval.** Count one approval for each approved candidate. Highest approval total wins.
 
-**Runoff Approval.** First, do Approval counting to find the top two approval finalists. Then run an automatic runoff between those two finalists using each voter's pairwise preference between finalists: each voter contributes one runoff vote to the finalist they prefer; pairwise ties contribute to neither. Finalist with more runoff votes wins.
+**Approval Top 2.** First, do Approval counting to find the top two approval finalists. Then run an automatic runoff between those two finalists using each voter's pairwise preference between finalists: each voter contributes one runoff vote to the finalist they prefer; pairwise ties contribute to neither. Finalist with more runoff votes wins.
 
 In the browser tool, this runoff comparison has a configurable source (default: true underlying utility). The default is meant to model a separate runoff election: when only two finalists remain, voters can often determine with much higher certainty which finalist they truly prefer. If desired, this can be switched to perceived-utility pairwise comparison instead.
 
@@ -199,7 +199,7 @@ Method-level strategic basics in the browser:
 
 - Plurality: voters choose between frontrunner and target.
 - Approval: approvals are shifted around a frontrunner-target pivot, including anti-front or anti-target suppression.
-- Runoff Approval: uses Approval strategy for ballot formation, then applies the top-two approval runoff using underlying pairwise finalist preference.
+- Approval Top 2: uses Approval strategy for ballot formation, then applies the top-two approval runoff using underlying pairwise finalist preference.
 - Score and STAR: score ballots are rescaled around frontrunner-target comparisons; STAR then uses its normal runoff.
 - RCV: rankings are reshaped to improve elimination dynamics for the preferred side.
 - Condorcet (Minimax implementation): pairwise ranking structure is tactically adjusted before tally.

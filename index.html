@@ -107,7 +107,7 @@
                     <label class="toggle"><input type="checkbox" id="m-plurality"
                             checked /><span>Plurality</span></label>
                     <label class="toggle"><input type="checkbox" id="m-approval" checked /><span>Approval</span></label>
-                    <label class="toggle"><input type="checkbox" id="m-runoff-approval" checked /><span>Runoff
+                    <label class="toggle"><input type="checkbox" id="m-runoff-approval" checked /><span>Approval Top 2
                             Approval</span></label>
                     <label class="toggle"><input type="checkbox" id="m-irv" checked /><span>RCV</span></label>
                     <label class="toggle"><input type="checkbox" id="m-star" checked /><span>STAR</span></label>
@@ -127,10 +127,10 @@
             </div>
 
             <div class="display-toggle">
-                <h3>Runoff Approval options</h3>
+                <h3>Approval Top 2 options</h3>
                 <div class="toggle-row">
                     <label class="toggle"><input type="checkbox" id="ra-true-runoff" checked /><span>Use perfect
-                            underlying utilities in the Runoff Approval finalist runoff (default)</span></label>
+                            underlying utilities in the Approval Top 2 finalist runoff (default)</span></label>
                 </div>
             </div>
 
@@ -358,7 +358,7 @@
                     candidates are assigned 5.)<br />
                     <strong>Approval:</strong> approve candidates in the considered set whose $\tilde{u}_i$ exceeds
                     the voter's global personal mean (computed over all $m$ candidates).<br />
-                    <strong>Runoff Approval:</strong> uses the exact same approval ballot as Approval.
+                    <strong>Approval Top 2:</strong> uses the exact same approval ballot as Approval.
                 </p>
             </details>
             <details>
@@ -366,7 +366,7 @@
                 <p>
                     <strong>Plurality:</strong> most top-choice votes wins.<br />
                     <strong>Approval:</strong> most approvals wins.<br />
-                    <strong>Runoff Approval:</strong> top two by approval totals advance; in the runoff, each voter
+                    <strong>Approval Top 2:</strong> top two by approval totals advance; in the runoff, each voter
                     supports whichever finalist they prefer between those two, and the finalist with more runoff
                     support wins. By default, this finalist comparison uses <em>true</em> underlying utilities as a
                     separate-election approximation: with only two finalists, voters can usually determine with near
@@ -405,10 +405,10 @@
                 </p>
             </details>
             <details>
-                <summary>Runoff Approval Utilities</summary>
+                <summary>Approval Top 2 Utilities</summary>
                 <p>
                     By default we use the voter's true utilities to determine their vote in the runoff. This is
-                    done for runoff approval but not STAR for a simple reason. Unlike in STAR where the runoff is
+                    done for Approval Top 2 but not STAR for a simple reason. Unlike in STAR where the runoff is
                     automatically calculated by the ballots submitted by the voters, the runoff under Approval must be
                     done at a later date. It seems far more plausible that voters can be 100% sure which candidate they
                     truly prefer if they have only two candidates to compare, and time after the initial voting allows

@@ -28,7 +28,7 @@ function randn() {
 const METHOD_COLORS = {
     Plurality: '#e05555',
     Approval: '#4ec96a',
-    'Runoff Approval': '#2fa07c',
+    'Approval Top 2': '#2fa07c',
     RCV: '#e09944',
     STAR: '#4ab8e0',
     Condorcet: '#9b6be0',
@@ -501,7 +501,7 @@ function buildMethods(enabled, options = {}) {
     const all = {
         Plurality: (pu, l, u) => pluralityWinner(pu, useStrategy, strategyShare).winner,
         Approval: (pu, l, u) => approvalWinner(pu, l, useStrategy, strategyShare).winner,
-        'Runoff Approval': (pu, l, u) => runoffApprovalWinner(pu, l, useStrategy, strategyShare, useTrueUtilitiesRunoff, u).winner,
+        'Approval Top 2': (pu, l, u) => runoffApprovalWinner(pu, l, useStrategy, strategyShare, useTrueUtilitiesRunoff, u).winner,
         RCV: (pu, l, u) => irvWinner(pu, l, useStrategy, strategyShare).winner,
         STAR: (pu, l, u) => starWinner(pu, l, useStrategy, strategyShare).winner,
         Condorcet: (pu, l, u) => condorcetWinner(pu, l, useStrategy, strategyShare).winner,
@@ -2067,7 +2067,7 @@ function plotScenarioOverallImprovement(res, tVals, lVals, methods, trialVse = n
                 !hasApproval ? 'Approval' : null,
             ].filter(Boolean);
             if (targets.length === 0) {
-                emptyMsg.textContent = 'Enable at least one reform target (Runoff Approval, RCV, Borda, Score, STAR, or Condorcet) to view scenario improvement.';
+                emptyMsg.textContent = 'Enable at least one reform target (Approval Top 2, RCV, Borda, Score, STAR, or Condorcet) to view scenario improvement.';
             } else if (missing.length > 0) {
                 emptyMsg.textContent = `Enable ${missing.join(' and ')} to view scenario improvement vs baseline methods.`;
             }
@@ -2271,7 +2271,7 @@ function plotWeightedOverallImprovement(res, tVals, lVals, methods) {
                 !hasApproval ? 'Approval' : null,
             ].filter(Boolean);
             if (targets.length === 0) {
-                emptyMsg.textContent = 'Enable at least one reform target (Runoff Approval, RCV, Borda, Score, STAR, or Condorcet) to view weighted improvement.';
+                emptyMsg.textContent = 'Enable at least one reform target (Approval Top 2, RCV, Borda, Score, STAR, or Condorcet) to view weighted improvement.';
             } else if (missing.length > 0) {
                 emptyMsg.textContent = `Enable ${missing.join(' and ')} to view weighted improvement vs baseline methods.`;
             }
@@ -2382,7 +2382,7 @@ function plotApprovalDiff(res, tVals, lVals, methods) {
 function getEnabledMethods() {
     return {
         Plurality: document.getElementById('m-plurality').checked,
-        'Runoff Approval': document.getElementById('m-runoff-approval').checked,
+        'Approval Top 2': document.getElementById('m-runoff-approval').checked,
         RCV: document.getElementById('m-irv').checked,
         Borda: document.getElementById('m-borda').checked,
         Score: document.getElementById('m-score').checked,
@@ -2519,7 +2519,7 @@ function isDefaultParamSet(params) {
     const defaults = {
         Plurality: true,
         Approval: true,
-        'Runoff Approval': true,
+        'Approval Top 2': true,
         RCV: true,
         STAR: true,
         Condorcet: true,

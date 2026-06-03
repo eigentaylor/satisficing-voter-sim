@@ -1,11 +1,11 @@
 {
   "version": 4,
   "entries": {
-    "svs-cache-v4:85|8|200|8|2|l2|raTrueRunoff=1|Plurality,Approval,Runoff Approval,RCV,STAR,Condorcet": {
+    "svs-cache-v4:85|8|200|8|2|l2|raTrueRunoff=1|Plurality,Approval,Approval Top 2,RCV,STAR,Condorcet": {
       "version": 4,
       "createdAt": 1780350584887,
-      "cacheKey": "svs-cache-v4:85|8|200|8|2|l2|raTrueRunoff=1|Plurality,Approval,Runoff Approval,RCV,STAR,Condorcet",
-      "signature": "85|8|200|8|2|l2|raTrueRunoff=1|Plurality,Approval,Runoff Approval,RCV,STAR,Condorcet",
+      "cacheKey": "svs-cache-v4:85|8|200|8|2|l2|raTrueRunoff=1|Plurality,Approval,Approval Top 2,RCV,STAR,Condorcet",
+      "signature": "85|8|200|8|2|l2|raTrueRunoff=1|Plurality,Approval,Approval Top 2,RCV,STAR,Condorcet",
       "params": {
         "nv": 85,
         "nc": 8,
@@ -16,7 +16,7 @@
         "runoffApprovalTrueUtilityRunoff": true,
         "enabledMethods": {
           "Plurality": true,
-          "Runoff Approval": true,
+          "Approval Top 2": true,
           "RCV": true,
           "Borda": false,
           "Score": false,
@@ -192,7 +192,7 @@
                 0.9601740946168572
               ]
             ],
-            "Runoff Approval": [
+            "Approval Top 2": [
               [
                 0.44907703201764543,
                 0.6343687206159047,
@@ -26434,7 +26434,7 @@
                 ]
               ]
             ],
-            "Runoff Approval": [
+            "Approval Top 2": [
               [
                 [
                   -0.17819692348363572,
@@ -78222,7 +78222,7 @@
           "methods": {
             "Plurality": true,
             "Approval": true,
-            "Runoff Approval": true,
+            "Approval Top 2": true,
             "RCV": true,
             "STAR": true,
             "Condorcet": true
@@ -78395,7 +78395,7 @@
                 0.984978318744932
               ]
             ],
-            "Runoff Approval": [
+            "Approval Top 2": [
               [
                 0.44907703201764543,
                 0.6343687206159047,
@@ -104637,7 +104637,7 @@
                 ]
               ]
             ],
-            "Runoff Approval": [
+            "Approval Top 2": [
               [
                 [
                   -0.17819692348363572,
@@ -156425,7 +156425,7 @@
           "methods": {
             "Plurality": true,
             "Approval": true,
-            "Runoff Approval": true,
+            "Approval Top 2": true,
             "RCV": true,
             "STAR": true,
             "Condorcet": true
