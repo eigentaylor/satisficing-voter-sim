@@ -40,8 +40,8 @@ const METHOD_COLORS = {
 // ── Core simulation utilities ─────────────────────────────────────────────────
 
 /** True utilities: (nv × nc) matrix, u[i][c] = -||v_i - p_c||_norm^2 */
-function makeElection(nv, nc, nd = 2, norm = 'l2') {
-    const normKey = String(norm || 'l2').toLowerCase();
+function makeElection(nv, nc, nd = 2, norm = 'l1') {
+    const normKey = String(norm || 'l1').toLowerCase();
     const useL1 = normKey === 'l1';
     const useLinf = normKey === 'linf';
     const v = Array.from({ length: nv }, () => Array.from({ length: nd }, () => rng() * 2 - 1));
@@ -2416,8 +2416,8 @@ function getEnabledMethods() {
 function getParams() {
     const preferredMode = document.getElementById('strategy-on')?.checked ? 'strategic' : 'honest';
     const enabledMethods = getEnabledMethods();
-    const normRaw = document.getElementById('norm')?.value || 'l2';
-    const norm = ['l1', 'l2', 'linf'].includes(normRaw) ? normRaw : 'l2';
+    const normRaw = document.getElementById('norm')?.value || 'l1';
+    const norm = ['l1', 'l2', 'linf'].includes(normRaw) ? normRaw : 'l1';
     const top2TrueUtilityRunoff = document.getElementById('ra-true-runoff')?.checked !== false;
     return {
         nv: +document.getElementById('nv').value,
@@ -2535,7 +2535,7 @@ function setActiveViewMode(mode, options = {}) {
 
 function isDefaultParamSet(params) {
     if (params.nv !== 85 || params.nc !== 8 || params.ntr !== 200 || params.ng !== 8 || params.nd !== 2) return false;
-    if ((params.norm || 'l2') !== 'l2') return false;
+    if ((params.norm || 'l1') !== 'l1') return false;
     if (params.top2TrueUtilityRunoff !== true) return false;
     const defaults = {
         Plurality: true,
@@ -2637,7 +2637,7 @@ function applyBundle(bundle, params, cacheKey) {
         ntr: Number(bundle?.params?.ntr ?? params?.ntr),
         ng: Number(bundle?.params?.ng ?? params?.ng),
         nd: Number(bundle?.params?.nd ?? params?.nd),
-        norm: String(bundle?.params?.norm ?? params?.norm ?? 'l2'),
+        norm: String(bundle?.params?.norm ?? params?.norm ?? 'l1'),
     };
     activeParamsKey = cacheKey;
 
