@@ -94,8 +94,8 @@
                 <div class="control-group">
                     <label for="norm">Distance norm</label>
                     <select id="norm" aria-label="Distance norm for utility">
-                        <option value="l2" selected>L_2 (Euclidean)</option>
-                        <option value="l1">L_1 (Manhattan)</option>
+                        <option value="l2">L_2 (Euclidean)</option>
+                        <option value="l1" selected>L_1 (Manhattan)</option>
                         <option value="linf">L_inf (Chebyshev)</option>
                     </select>
                 </div>
@@ -106,6 +106,8 @@
                 <div class="toggle-row">
                     <label class="toggle"><input type="checkbox" id="m-plurality"
                             checked /><span>Plurality</span></label>
+                    <label class="toggle"><input type="checkbox" id="m-runoff-plurality" checked /><span>Plurality
+                            Top 2</span></label>
                     <label class="toggle"><input type="checkbox" id="m-approval" checked /><span>Approval</span></label>
                     <label class="toggle"><input type="checkbox" id="m-runoff-approval" checked /><span>Approval Top
                             2</span></label>
@@ -127,10 +129,11 @@
             </div>
 
             <div class="display-toggle">
-                <h3>Approval Top 2 options</h3>
+                <h3>Top 2 runoff options</h3>
                 <div class="toggle-row">
                     <label class="toggle"><input type="checkbox" id="ra-true-runoff" checked /><span>Use perfect
-                            underlying utilities in the Approval Top 2 finalist runoff (default)</span></label>
+                            underlying utilities in Top 2 finalist runoff methods
+                            (default)</span></label>
                 </div>
             </div>
 
@@ -347,6 +350,7 @@
                 <summary>Ballot construction</summary>
                 <p>
                     <strong>Plurality:</strong> vote for the single top perceived candidate.<br />
+                    <strong>Plurality Top 2:</strong> uses the exact same first-round ballot as Plurality.<br />
                     <strong>RCV / Borda / Condorcet:</strong> rank the considered set in order of $\tilde{u}_i$.<br />
                     <strong>Score / STAR:</strong> for each voter, first take that voter's perceived utilities
                     $\tilde{u}_i(c)$ over <em>all</em> candidates and find
@@ -365,6 +369,10 @@
                 <summary>How winners are counted (including Condorcet)</summary>
                 <p>
                     <strong>Plurality:</strong> most top-choice votes wins.<br />
+                    <strong>Plurality Top 2:</strong> top two by plurality totals advance; in the runoff, each voter
+                    supports whichever finalist they prefer between those two, and the finalist with more runoff
+                    support wins. By default, this finalist comparison uses <em>true</em> underlying utilities as a
+                    separate-election approximation. Turn off the toggle above to use perceived utilities instead.<br />
                     <strong>Approval:</strong> most approvals wins.<br />
                     <strong>Approval Top 2:</strong> top two by approval totals advance; in the runoff, each voter
                     supports whichever finalist they prefer between those two, and the finalist with more runoff
@@ -405,12 +413,14 @@
                 </p>
             </details>
             <details>
-                <summary>Approval Top 2 Utilities</summary>
+                <summary>Top 2 Runoff Utilities</summary>
                 <p>
-                    By default we use the voter's true utilities to determine their vote in the runoff. This is
-                    done for Approval Top 2 but not STAR for a simple reason. Unlike in STAR where the runoff is
-                    automatically calculated by the ballots submitted by the voters, the runoff under Approval must be
-                    done at a later date. It seems far more plausible that voters can be 100% sure which candidate they
+                    By default we use the voter's true utilities to determine runoff votes for both
+                    <strong>Plurality Top 2</strong> and <strong>Approval Top 2</strong>. This is done for Top 2
+                    runoff methods but not STAR for a simple reason. Unlike in STAR where the runoff is
+                    automatically calculated by the ballots submitted by the voters, Top 2 runoffs happen later and
+                    can benefit from this extra comparison time. It seems far more plausible that voters can be 100%
+                    sure which candidate they
                     truly prefer if they have only two candidates to compare, and time after the initial voting allows
                     them to make this determination accurately.
                 </p>

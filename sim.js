@@ -27,6 +27,7 @@ function randn() {
 // ── Color palette ─────────────────────────────────────────────────────────────
 const METHOD_COLORS = {
     Plurality: '#e05555',
+    'Plurality Top 2': '#cc6a5a',
     Approval: '#4ec96a',
     'Approval Top 2': '#2fa07c',
     RCV: '#e09944',
@@ -245,7 +246,7 @@ function pluralityWinner(pu, useStrategy = false, strategyShare = 1.0) {
     const nv = pu.length, nc = pu[0].length;
     const top1 = pu.map(row => argmax(row));
     const polls = bincount(top1, nc);
-    if (!useStrategy) return { winner: argmax(polls), polls };
+    if (!useStrategy) return { winner: argmax(polls), polls, counts: polls.slice() };
 
     const [front, target] = frontAndTarget(polls);
     const stratMask = strategicVoterMask(nv, strategyShare);
@@ -255,7 +256,25 @@ function pluralityWinner(pu, useStrategy = false, strategyShare = 1.0) {
         top1Strat[i] = pu[i][target] > pu[i][front] ? target : front;
     }
     const counts = bincount(top1Strat, nc);
-    return { winner: argmax(counts), polls };
+    return { winner: argmax(counts), polls, counts };
+}
+
+function runoffPluralityWinner(pu, useStrategy = false, strategyShare = 1.0, useTrueUtilitiesTop2 = true, u = null) {
+    const { polls, counts } = pluralityWinner(pu, useStrategy, strategyShare);
+    const firstRoundTotals = Array.isArray(counts) ? counts : polls;
+    const nc = firstRoundTotals.length;
+    const sorted = Array.from({ length: nc }, (_, i) => i).sort((a, b) => firstRoundTotals[b] - firstRoundTotals[a]);
+    const [f1, f2] = sorted;
+    if (f2 === undefined) return { winner: f1, polls };
+
+    const runoffMatrix = (useTrueUtilitiesTop2 && Array.isArray(u) && u.length === pu.length) ? u : pu;
+    let w1 = 0;
+    let w2 = 0;
+    for (let i = 0; i < runoffMatrix.length; i++) {
+        if (runoffMatrix[i][f1] > runoffMatrix[i][f2]) w1++;
+        else if (runoffMatrix[i][f2] > runoffMatrix[i][f1]) w2++;
+    }
+    return { winner: w1 >= w2 ? f1 : f2, polls };
 }
 
 function approvalWinner(pu, l, useStrategy = false, strategyShare = 1.0) {
@@ -305,14 +324,14 @@ function approvalWinner(pu, l, useStrategy = false, strategyShare = 1.0) {
     return { winner: argmax(totals), polls, approvals, totals };
 }
 
-function runoffApprovalWinner(pu, l, useStrategy = false, strategyShare = 1.0, useTrueUtilitiesRunoff = true, u = null) {
+function runoffApprovalWinner(pu, l, useStrategy = false, strategyShare = 1.0, useTrueUtilitiesTop2 = true, u = null) {
     const { polls, totals } = approvalWinner(pu, l, useStrategy, strategyShare);
     const nc = totals.length;
     const sorted = Array.from({ length: nc }, (_, i) => i).sort((a, b) => totals[b] - totals[a]);
     const [f1, f2] = sorted;
     if (f2 === undefined) return { winner: f1, polls };
 
-    const runoffMatrix = (useTrueUtilitiesRunoff && Array.isArray(u) && u.length === pu.length) ? u : pu;
+    const runoffMatrix = (useTrueUtilitiesTop2 && Array.isArray(u) && u.length === pu.length) ? u : pu;
     let w1 = 0;
     let w2 = 0;
     for (let i = 0; i < runoffMatrix.length; i++) {
@@ -497,11 +516,12 @@ function irvWinner(pu, l, useStrategy = false, strategyShare = 1.0) {
 function buildMethods(enabled, options = {}) {
     const useStrategy = Boolean(options.useStrategy);
     const strategyShare = Number.isFinite(options.strategyShare) ? options.strategyShare : 1.0;
-    const useTrueUtilitiesRunoff = options.useTrueUtilitiesRunoff !== false;
+    const useTrueUtilitiesTop2 = options.useTrueUtilitiesTop2 !== false;
     const all = {
         Plurality: (pu, l, u) => pluralityWinner(pu, useStrategy, strategyShare).winner,
+        'Plurality Top 2': (pu, l, u) => runoffPluralityWinner(pu, useStrategy, strategyShare, useTrueUtilitiesTop2, u).winner,
         Approval: (pu, l, u) => approvalWinner(pu, l, useStrategy, strategyShare).winner,
-        'Approval Top 2': (pu, l, u) => runoffApprovalWinner(pu, l, useStrategy, strategyShare, useTrueUtilitiesRunoff, u).winner,
+        'Approval Top 2': (pu, l, u) => runoffApprovalWinner(pu, l, useStrategy, strategyShare, useTrueUtilitiesTop2, u).winner,
         RCV: (pu, l, u) => irvWinner(pu, l, useStrategy, strategyShare).winner,
         STAR: (pu, l, u) => starWinner(pu, l, useStrategy, strategyShare).winner,
         Condorcet: (pu, l, u) => condorcetWinner(pu, l, useStrategy, strategyShare).winner,
@@ -523,7 +543,7 @@ let activeViewMode = 'honest';
 let activeParamsKey = null;
 let activeRunParams = null;
 
-const CACHE_VERSION = 4;
+const CACHE_VERSION = 5;
 const CACHE_PREFIX = `svs-cache-v${CACHE_VERSION}`;
 const CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const DEFAULT_BUNDLE_PATH = 'output/default-sim-cache.json';
@@ -1029,7 +1049,7 @@ function renderScenarioPairwiseGrid(containerEl, sc, methods, trialVse) {
 
     containerEl.innerHTML =
         `<div class="scenario-matrix-wrap">` +
-        `<div class="scenario-stats-title">Sufficient evidence that row method &gt; column method? (99% CI excludes 0) — hover or tap a cell for p-value and CI.</div>` +
+        `<div class="scenario-stats-title">Sufficient evidence that row method &gt; column method? (99% CI excludes 0). 🟢 Yes, 🔴 No. Hover or tap a cell for p-value and CI.</div>` +
         `<div class="matrix-scroll">` +
         `<table class="pairwise-matrix scenario-matrix"><thead><tr><th>Row &gt; Col</th>${colHeaders}</tr></thead><tbody>${bodyRows}</tbody></table>` +
         `</div>` +
@@ -2067,7 +2087,7 @@ function plotScenarioOverallImprovement(res, tVals, lVals, methods, trialVse = n
                 !hasApproval ? 'Approval' : null,
             ].filter(Boolean);
             if (targets.length === 0) {
-                emptyMsg.textContent = 'Enable at least one reform target (Approval Top 2, RCV, Borda, Score, STAR, or Condorcet) to view scenario improvement.';
+                emptyMsg.textContent = 'Enable at least one reform target (Plurality Top 2, Approval Top 2, RCV, Borda, Score, STAR, or Condorcet) to view scenario improvement.';
             } else if (missing.length > 0) {
                 emptyMsg.textContent = `Enable ${missing.join(' and ')} to view scenario improvement vs baseline methods.`;
             }
@@ -2271,7 +2291,7 @@ function plotWeightedOverallImprovement(res, tVals, lVals, methods) {
                 !hasApproval ? 'Approval' : null,
             ].filter(Boolean);
             if (targets.length === 0) {
-                emptyMsg.textContent = 'Enable at least one reform target (Approval Top 2, RCV, Borda, Score, STAR, or Condorcet) to view weighted improvement.';
+                emptyMsg.textContent = 'Enable at least one reform target (Plurality Top 2, Approval Top 2, RCV, Borda, Score, STAR, or Condorcet) to view weighted improvement.';
             } else if (missing.length > 0) {
                 emptyMsg.textContent = `Enable ${missing.join(' and ')} to view weighted improvement vs baseline methods.`;
             }
@@ -2382,6 +2402,7 @@ function plotApprovalDiff(res, tVals, lVals, methods) {
 function getEnabledMethods() {
     return {
         Plurality: document.getElementById('m-plurality').checked,
+        'Plurality Top 2': document.getElementById('m-runoff-plurality').checked,
         'Approval Top 2': document.getElementById('m-runoff-approval').checked,
         RCV: document.getElementById('m-irv').checked,
         Borda: document.getElementById('m-borda').checked,
@@ -2397,7 +2418,7 @@ function getParams() {
     const enabledMethods = getEnabledMethods();
     const normRaw = document.getElementById('norm')?.value || 'l2';
     const norm = ['l1', 'l2', 'linf'].includes(normRaw) ? normRaw : 'l2';
-    const runoffApprovalTrueUtilityRunoff = document.getElementById('ra-true-runoff')?.checked !== false;
+    const top2TrueUtilityRunoff = document.getElementById('ra-true-runoff')?.checked !== false;
     return {
         nv: +document.getElementById('nv').value,
         nc: +document.getElementById('nc').value,
@@ -2405,7 +2426,7 @@ function getParams() {
         ng: +document.getElementById('ng').value,
         nd: +document.getElementById('nd').value,
         norm,
-        runoffApprovalTrueUtilityRunoff,
+        top2TrueUtilityRunoff,
         preferredMode,
         enabledMethods,
         strategyShare: 1.0,
@@ -2421,7 +2442,7 @@ function paramsSignature(params) {
         params.ng,
         params.nd,
         params.norm,
-        params.runoffApprovalTrueUtilityRunoff ? 'raTrueRunoff=1' : 'raTrueRunoff=0',
+        params.top2TrueUtilityRunoff ? 'top2TrueRunoff=1' : 'top2TrueRunoff=0',
         orderedEnabledMethods(params.enabledMethods).join(','),
     ].join('|');
 }
@@ -2515,9 +2536,10 @@ function setActiveViewMode(mode, options = {}) {
 function isDefaultParamSet(params) {
     if (params.nv !== 85 || params.nc !== 8 || params.ntr !== 200 || params.ng !== 8 || params.nd !== 2) return false;
     if ((params.norm || 'l2') !== 'l2') return false;
-    if (params.runoffApprovalTrueUtilityRunoff !== true) return false;
+    if (params.top2TrueUtilityRunoff !== true) return false;
     const defaults = {
         Plurality: true,
+        'Plurality Top 2': true,
         Approval: true,
         'Approval Top 2': true,
         RCV: true,
@@ -2542,7 +2564,7 @@ function saveBundleToCache(cacheKey, params) {
             ng: params.ng,
             nd: params.nd,
             norm: params.norm,
-            runoffApprovalTrueUtilityRunoff: params.runoffApprovalTrueUtilityRunoff,
+            top2TrueUtilityRunoff: params.top2TrueUtilityRunoff,
             enabledMethods: params.enabledMethods,
         },
         modes: {
@@ -2574,7 +2596,7 @@ function exportCurrentCacheEntryFromMemory() {
             ng: params.ng,
             nd: params.nd,
             norm: params.norm,
-            runoffApprovalTrueUtilityRunoff: params.runoffApprovalTrueUtilityRunoff,
+            top2TrueUtilityRunoff: params.top2TrueUtilityRunoff,
             enabledMethods: params.enabledMethods,
         },
         modes: {
@@ -2717,12 +2739,12 @@ async function runSimulation(options = {}) {
     params.honestMethods = buildMethods(params.enabledMethods, {
         useStrategy: false,
         strategyShare: params.strategyShare,
-        useTrueUtilitiesRunoff: params.runoffApprovalTrueUtilityRunoff,
+        useTrueUtilitiesTop2: params.top2TrueUtilityRunoff,
     });
     params.strategicMethods = buildMethods(params.enabledMethods, {
         useStrategy: true,
         strategyShare: params.strategyShare,
-        useTrueUtilitiesRunoff: params.runoffApprovalTrueUtilityRunoff,
+        useTrueUtilitiesTop2: params.top2TrueUtilityRunoff,
     });
 
     if (useCache && !forceRecompute && activeParamsKey === params.cacheKey && simResultsByMode.honest && simResultsByMode.strategic) {
@@ -2869,7 +2891,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    ['m-plurality', 'm-approval', 'm-runoff-approval', 'm-irv', 'm-star', 'm-condorcet', 'm-score', 'm-borda'].forEach(id => {
+    ['m-plurality', 'm-runoff-plurality', 'm-approval', 'm-runoff-approval', 'm-irv', 'm-star', 'm-condorcet', 'm-score', 'm-borda'].forEach(id => {
         const input = document.getElementById(id);
         if (!input) return;
         input.addEventListener('change', () => {
