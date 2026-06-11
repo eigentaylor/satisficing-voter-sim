@@ -15,7 +15,7 @@ from typing import Dict, List
 
 import numpy as np
 
-import satisficing_sim_strat_1 as sim
+import archive.satisficing_sim_strat_1 as sim
 
 METHOD_ORDER = [
     "Plurality",
