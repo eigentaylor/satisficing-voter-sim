@@ -140,6 +140,18 @@
                 </div>
             </div>
 
+            <div class="display-toggle">
+                <h3>Approval strategy options</h3>
+                <div class="toggle-row">
+                    <label class="toggle"><input type="checkbox" id="approval-leader-rule" checked /><span>Use
+                            Laslier's Leader Rule for strategic Approval voting
+                            (default)</span></label>
+                    <label class="toggle"><input type="checkbox" id="approval-top2-leader-rule" /><span>Use generalized
+                            Leader Rule for strategic Approval Top 2 first
+                            round</span></label>
+                </div>
+            </div>
+
             <div class="run-row">
                 <button id="run-btn" class="btn-primary">▶ Run Simulation</button>
                 <button id="cancel-btn" class="btn-danger" disabled>■ Cancel</button>
@@ -449,6 +461,66 @@
                     on the strategy model and per-method behavior, see
                     <a href="https://github.com/eigentaylor/satisficing-voter-sim#strategic-voting-mode-browser-tool"
                         target="_blank" rel="noopener">README on GitHub</a>.
+                </p>
+            </details>
+            <details>
+                <summary>Approval strategic voting: Laslier's Leader Rule vs. pivot strategy</summary>
+                <p>
+                    When strategic voting is enabled, Approval ballots can use one of two strategies. The option is
+                    controlled by the <strong>Laslier's Leader Rule</strong> toggle in the simulation options.
+                </p>
+                <p>
+                    <strong>Laslier's Leader Rule (default):</strong> First, a preliminary honest approval poll is run
+                    to identify the <em>leader</em> (the candidate who would win that honest round) and the
+                    <em>challenger</em> (the runner-up in that poll). Each voter then constructs their strategic ballot
+                    as follows:
+                </p>
+                <ol>
+                    <li>Approve every candidate they prefer to the leader.</li>
+                    <li>Approve the leader if and only if they prefer the leader to the challenger.</li>
+                    <li>Approve no other candidates (those ranked below the leader).</li>
+                </ol>
+                <p>
+                    The energy parameter ($\ell$) then truncates this ballot to the voter's top-$K$ considered
+                    candidates — so if energy is low enough that the leader falls outside the considered set, the voter
+                    simply approves whoever they prefer among their top-$K$.
+                </p>
+                <p>
+                    This rule is well-grounded in the game-theoretic literature on approval voting. Voters essentially
+                    treat the election as a binary contest between the leader and the challenger, expressing support for
+                    the leader only when they prefer them over the main rival.
+                </p>
+                <p>
+                    <strong>Pivot strategy (alternative):</strong> When the Leader Rule is disabled, each strategic
+                    voter instead finds a <em>pivot point</em> midway between their perceived utilities for the
+                    frontrunner and target candidate, approves all considered candidates above that pivot, then forces
+                    the frontrunner or target onto or off the ballot depending on which they prefer. This is a
+                    different tactical heuristic adapted from Quinn's VSE model.
+                </p>
+            </details>
+            <details>
+                <summary>Approval Top 2: generalized Leader Rule for the first round</summary>
+                <p>
+                    Approval Top 2 holds a first-round approval vote and advances the top two finalists. The optional
+                    <strong>generalized Leader Rule</strong> (disabled by default) applies a three-way strategic
+                    heuristic to that first round, based on the top three candidates ($x_1$, $x_2$, $x_3$) from an
+                    initial honest approval poll:
+                </p>
+                <ul>
+                    <li>Approve $x_1$ if and only if they prefer $x_1$ to $x_3$.</li>
+                    <li>Approve $x_2$ if and only if they prefer $x_2$ to $x_3$.</li>
+                    <li>Approve all other candidates (including $x_3$) if and only if they prefer that candidate to
+                        $x_2$.</li>
+                </ul>
+                <p>
+                    The intuition is that voters want to control which two candidates advance. They support the top two
+                    only when those candidates beat the third-place threat, and support everyone else only when they
+                    beat the second-place frontrunner. As with all strategic ballots, the energy parameter truncates
+                    the result to the voter's top-$K$ considered candidates.
+                </p>
+                <p>
+                    When this option is disabled, Approval Top 2 uses the same first-round strategy as regular
+                    Approval (either Leader Rule or pivot strategy, per that toggle).
                 </p>
             </details>
         </section>

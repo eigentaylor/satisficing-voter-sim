@@ -277,7 +277,7 @@ function runoffPluralityWinner(pu, useStrategy = false, strategyShare = 1.0, use
     return { winner: w1 >= w2 ? f1 : f2, polls };
 }
 
-function approvalWinner(pu, l, useStrategy = false, strategyShare = 1.0) {
+function approvalWinner(pu, l, useStrategy = false, strategyShare = 1.0, useLeaderRule = false) {
     const nv = pu.length;
     const nc = pu[0].length;
     const { tidxAll, considered } = topKMask(pu, l);
@@ -295,25 +295,46 @@ function approvalWinner(pu, l, useStrategy = false, strategyShare = 1.0) {
         for (let c = 0; c < nc; c++) if (approvals[i][c]) polls[c]++;
     }
     if (useStrategy) {
-        const [front, target] = frontAndTarget(polls);
         const stratMask = strategicVoterMask(nv, strategyShare);
-        for (let i = 0; i < nv; i++) {
-            if (!stratMask[i]) continue;
-            const pivot = (pu[i][front] + pu[i][target]) / 2;
-            const rowApprovals = new Array(nc).fill(false);
-            for (let c = 0; c < nc; c++) {
-                rowApprovals[c] = considered[i][c] && pu[i][c] >= pivot;
+        if (useLeaderRule) {
+            // Laslier's Leader Rule: leader = honest winner, challenger = honest runner-up
+            const [leader, challenger] = frontAndTarget(polls);
+            for (let i = 0; i < nv; i++) {
+                if (!stratMask[i]) continue;
+                const row = pu[i];
+                const leaderUtil = row[leader];
+                const challengerUtil = row[challenger];
+                const rowApprovals = new Array(nc).fill(false);
+                // Rule 1: approve all considered candidates preferred to the leader
+                for (let c = 0; c < nc; c++) {
+                    if (considered[i][c] && row[c] > leaderUtil) rowApprovals[c] = true;
+                }
+                // Rule 2: approve the leader iff preferred to the challenger
+                if (considered[i][leader] && leaderUtil > challengerUtil) rowApprovals[leader] = true;
+                // Rule 3: approve no other candidates (already false)
+                if (!rowApprovals.some(Boolean)) rowApprovals[tidxAll[i][0]] = true;
+                approvals[i] = rowApprovals;
             }
-            const prefersTarget = pu[i][target] > pu[i][front];
-            if (prefersTarget) {
-                rowApprovals[front] = false;
-                rowApprovals[target] = considered[i][target];
-            } else {
-                rowApprovals[target] = false;
-                rowApprovals[front] = considered[i][front];
+        } else {
+            const [front, target] = frontAndTarget(polls);
+            for (let i = 0; i < nv; i++) {
+                if (!stratMask[i]) continue;
+                const pivot = (pu[i][front] + pu[i][target]) / 2;
+                const rowApprovals = new Array(nc).fill(false);
+                for (let c = 0; c < nc; c++) {
+                    rowApprovals[c] = considered[i][c] && pu[i][c] >= pivot;
+                }
+                const prefersTarget = pu[i][target] > pu[i][front];
+                if (prefersTarget) {
+                    rowApprovals[front] = false;
+                    rowApprovals[target] = considered[i][target];
+                } else {
+                    rowApprovals[target] = false;
+                    rowApprovals[front] = considered[i][front];
+                }
+                if (!rowApprovals.some(Boolean)) rowApprovals[tidxAll[i][0]] = true;
+                approvals[i] = rowApprovals;
             }
-            if (!rowApprovals.some(Boolean)) rowApprovals[tidxAll[i][0]] = true;
-            approvals[i] = rowApprovals;
         }
     }
 
@@ -324,9 +345,45 @@ function approvalWinner(pu, l, useStrategy = false, strategyShare = 1.0) {
     return { winner: argmax(totals), polls, approvals, totals };
 }
 
-function runoffApprovalWinner(pu, l, useStrategy = false, strategyShare = 1.0, useTrueUtilitiesTop2 = true, u = null) {
-    const { polls, totals } = approvalWinner(pu, l, useStrategy, strategyShare);
-    const nc = totals.length;
+function runoffApprovalWinner(pu, l, useStrategy = false, strategyShare = 1.0, useTrueUtilitiesTop2 = true, u = null, useLeaderRule = false, useTop2LeaderRule = false) {
+    let polls, totals;
+    const nc = pu[0].length;
+    if (useStrategy && useTop2LeaderRule && nc >= 3) {
+        // Generalized leader rule for Approval Top 2:
+        // x1/x2/x3 = top 3 from honest poll.
+        // Approve x1 iff u(x1) > u(x3); approve x2 iff u(x2) > u(x3);
+        // approve all others (including x3) iff u(c) > u(x2).
+        const nv = pu.length;
+        const { tidxAll, considered } = topKMask(pu, l);
+        const honestResult = approvalWinner(pu, l, false);
+        const order = Array.from({ length: nc }, (_, i) => i).sort((a, b) => honestResult.polls[b] - honestResult.polls[a]);
+        const [x1, x2, x3] = order;
+        const stratMask = strategicVoterMask(nv, strategyShare);
+        const approvals = honestResult.approvals.map(row => row.slice());
+        for (let i = 0; i < nv; i++) {
+            if (!stratMask[i]) continue;
+            const row = pu[i];
+            const rowApprovals = new Array(nc).fill(false);
+            for (let c = 0; c < nc; c++) {
+                if (!considered[i][c]) continue;
+                if (c === x1) rowApprovals[c] = row[x1] > row[x3];
+                else if (c === x2) rowApprovals[c] = row[x2] > row[x3];
+                else rowApprovals[c] = row[c] > row[x2];
+            }
+            if (!rowApprovals.some(Boolean)) rowApprovals[tidxAll[i][0]] = true;
+            approvals[i] = rowApprovals;
+        }
+        totals = new Array(nc).fill(0);
+        for (let i = 0; i < nv; i++) {
+            for (let c = 0; c < nc; c++) if (approvals[i][c]) totals[c]++;
+        }
+        polls = honestResult.polls;
+    } else {
+        const result = approvalWinner(pu, l, useStrategy, strategyShare, useLeaderRule);
+        polls = result.polls;
+        totals = result.totals;
+    }
+
     const sorted = Array.from({ length: nc }, (_, i) => i).sort((a, b) => totals[b] - totals[a]);
     const [f1, f2] = sorted;
     if (f2 === undefined) return { winner: f1, polls };
@@ -517,11 +574,13 @@ function buildMethods(enabled, options = {}) {
     const useStrategy = Boolean(options.useStrategy);
     const strategyShare = Number.isFinite(options.strategyShare) ? options.strategyShare : 1.0;
     const useTrueUtilitiesTop2 = options.useTrueUtilitiesTop2 !== false;
+    const useLeaderRule = Boolean(options.useLeaderRule);
+    const useTop2LeaderRule = Boolean(options.useTop2LeaderRule);
     const all = {
         Plurality: (pu, l, u) => pluralityWinner(pu, useStrategy, strategyShare).winner,
         'Plurality Top 2': (pu, l, u) => runoffPluralityWinner(pu, useStrategy, strategyShare, useTrueUtilitiesTop2, u).winner,
-        Approval: (pu, l, u) => approvalWinner(pu, l, useStrategy, strategyShare).winner,
-        'Approval Top 2': (pu, l, u) => runoffApprovalWinner(pu, l, useStrategy, strategyShare, useTrueUtilitiesTop2, u).winner,
+        Approval: (pu, l, u) => approvalWinner(pu, l, useStrategy, strategyShare, useLeaderRule).winner,
+        'Approval Top 2': (pu, l, u) => runoffApprovalWinner(pu, l, useStrategy, strategyShare, useTrueUtilitiesTop2, u, useLeaderRule, useTop2LeaderRule).winner,
         RCV: (pu, l, u) => irvWinner(pu, l, useStrategy, strategyShare).winner,
         STAR: (pu, l, u) => starWinner(pu, l, useStrategy, strategyShare).winner,
         Condorcet: (pu, l, u) => condorcetWinner(pu, l, useStrategy, strategyShare).winner,
@@ -2419,6 +2478,8 @@ function getParams() {
     const normRaw = document.getElementById('norm')?.value || 'l1';
     const norm = ['l1', 'l2', 'linf'].includes(normRaw) ? normRaw : 'l1';
     const top2TrueUtilityRunoff = document.getElementById('ra-true-runoff')?.checked !== false;
+    const useLeaderRule = document.getElementById('approval-leader-rule')?.checked !== false;
+    const useTop2LeaderRule = document.getElementById('approval-top2-leader-rule')?.checked === true;
     return {
         nv: +document.getElementById('nv').value,
         nc: +document.getElementById('nc').value,
@@ -2427,6 +2488,8 @@ function getParams() {
         nd: +document.getElementById('nd').value,
         norm,
         top2TrueUtilityRunoff,
+        useLeaderRule,
+        useTop2LeaderRule,
         preferredMode,
         enabledMethods,
         strategyShare: 1.0,
@@ -2443,6 +2506,8 @@ function paramsSignature(params) {
         params.nd,
         params.norm,
         params.top2TrueUtilityRunoff ? 'top2TrueRunoff=1' : 'top2TrueRunoff=0',
+        params.useLeaderRule ? 'leaderRule=1' : 'leaderRule=0',
+        params.useTop2LeaderRule ? 'top2LeaderRule=1' : 'top2LeaderRule=0',
         orderedEnabledMethods(params.enabledMethods).join(','),
     ].join('|');
 }
@@ -2740,11 +2805,14 @@ async function runSimulation(options = {}) {
         useStrategy: false,
         strategyShare: params.strategyShare,
         useTrueUtilitiesTop2: params.top2TrueUtilityRunoff,
+        useLeaderRule: false,
     });
     params.strategicMethods = buildMethods(params.enabledMethods, {
         useStrategy: true,
         strategyShare: params.strategyShare,
         useTrueUtilitiesTop2: params.top2TrueUtilityRunoff,
+        useLeaderRule: params.useLeaderRule,
+        useTop2LeaderRule: params.useTop2LeaderRule,
     });
 
     if (useCache && !forceRecompute && activeParamsKey === params.cacheKey && simResultsByMode.honest && simResultsByMode.strategic) {
