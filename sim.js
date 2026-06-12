@@ -29,7 +29,10 @@ const METHOD_COLORS = {
     Plurality: '#e05555',
     'Plurality Top 2': '#cc6a5a',
     Approval: '#4ec96a',
+    'Approval (Leader)': '#8edb47',
     'Approval Top 2': '#2fa07c',
+    'Approval Top 2 (Leader)': '#47c4a0',
+    'Approval Top 2 (Gen. Leader)': '#2adbbf',
     RCV: '#e09944',
     STAR: '#4ab8e0',
     Condorcet: '#9b6be0',
@@ -576,11 +579,13 @@ function buildMethods(enabled, options = {}) {
     const useTrueUtilitiesTop2 = options.useTrueUtilitiesTop2 !== false;
     const useLeaderRule = Boolean(options.useLeaderRule);
     const useTop2LeaderRule = Boolean(options.useTop2LeaderRule);
+
+    // Base methods: Approval always uses pivot strategy regardless of leader rule options.
     const all = {
         Plurality: (pu, l, u) => pluralityWinner(pu, useStrategy, strategyShare).winner,
         'Plurality Top 2': (pu, l, u) => runoffPluralityWinner(pu, useStrategy, strategyShare, useTrueUtilitiesTop2, u).winner,
-        Approval: (pu, l, u) => approvalWinner(pu, l, useStrategy, strategyShare, useLeaderRule).winner,
-        'Approval Top 2': (pu, l, u) => runoffApprovalWinner(pu, l, useStrategy, strategyShare, useTrueUtilitiesTop2, u, useLeaderRule, useTop2LeaderRule).winner,
+        Approval: (pu, l, u) => approvalWinner(pu, l, useStrategy, strategyShare, false).winner,
+        'Approval Top 2': (pu, l, u) => runoffApprovalWinner(pu, l, useStrategy, strategyShare, useTrueUtilitiesTop2, u, false, false).winner,
         RCV: (pu, l, u) => irvWinner(pu, l, useStrategy, strategyShare).winner,
         STAR: (pu, l, u) => starWinner(pu, l, useStrategy, strategyShare).winner,
         Condorcet: (pu, l, u) => condorcetWinner(pu, l, useStrategy, strategyShare).winner,
@@ -589,6 +594,21 @@ function buildMethods(enabled, options = {}) {
     };
     const out = {};
     for (const k of Object.keys(all)) if (enabled[k]) out[k] = all[k];
+
+    // Strategic-only leader rule variants — added alongside base Approval methods, not replacing them.
+    if (useStrategy) {
+        if (useLeaderRule && enabled['Approval']) {
+            out['Approval (Leader)'] = (pu, l, u) => approvalWinner(pu, l, true, strategyShare, true).winner;
+        }
+        if (enabled['Approval Top 2']) {
+            if (useTop2LeaderRule) {
+                out['Approval Top 2 (Gen. Leader)'] = (pu, l, u) => runoffApprovalWinner(pu, l, true, strategyShare, useTrueUtilitiesTop2, u, false, true).winner;
+            } else if (useLeaderRule) {
+                out['Approval Top 2 (Leader)'] = (pu, l, u) => runoffApprovalWinner(pu, l, true, strategyShare, useTrueUtilitiesTop2, u, true, false).winner;
+            }
+        }
+    }
+
     return out;
 }
 
@@ -800,20 +820,24 @@ function analyzeHypotheses(trialVse, tVals, lVals, methods) {
 }
 
 async function runGrid(params, onProgress) {
-    const { nv, nc, ntr, ng, nd, norm, enabledMethods, honestMethods, strategicMethods, computeBoth } = params;
-    const methodNames = orderedEnabledMethods(enabledMethods);
+    const { nv, nc, ntr, ng, nd, norm, honestMethods, strategicMethods, computeBoth } = params;
+    // Honest and strategic may have different method sets (strategic adds leader-rule variants).
+    const honestMethodNames = orderedEnabledMethods(honestMethods);
+    const strategicMethodNames = computeBoth ? orderedEnabledMethods(strategicMethods) : [];
     const tVals = linspace(0, 1, ng);
     const lVals = linspace(1 / nc, 1, ng);
     const resHonest = {};
     const trialVseHonest = {};
     const resStrategic = {};
     const trialVseStrategic = {};
-    for (const m of methodNames) {
+    for (const m of honestMethodNames) {
         resHonest[m] = Array.from({ length: ng }, () => new Float64Array(ng));
         trialVseHonest[m] = Array.from({ length: ng }, () =>
             Array.from({ length: ng }, () => new Float64Array(ntr))
         );
-        if (computeBoth) {
+    }
+    if (computeBoth) {
+        for (const m of strategicMethodNames) {
             resStrategic[m] = Array.from({ length: ng }, () => new Float64Array(ng));
             trialVseStrategic[m] = Array.from({ length: ng }, () =>
                 Array.from({ length: ng }, () => new Float64Array(ntr))
@@ -836,10 +860,8 @@ async function runGrid(params, onProgress) {
             const t = tVals[ti], l = lVals[li];
             const accHonest = {};
             const accStrategic = {};
-            for (const m of methodNames) {
-                accHonest[m] = 0;
-                if (computeBoth) accStrategic[m] = 0;
-            }
+            for (const m of honestMethodNames) accHonest[m] = 0;
+            if (computeBoth) for (const m of strategicMethodNames) accStrategic[m] = 0;
 
             for (let tr = 0; tr < ntr; tr++) {
                 if (simAborted) return null;
@@ -848,25 +870,24 @@ async function runGrid(params, onProgress) {
                 const cm = colMeans(u);
                 const swRand = cm.reduce((s, x) => s + x, 0) / nc;
                 const swOpt = Math.max(...cm);
-                for (const name of methodNames) {
-                    const honestWinner = honestMethods[name](pu, l, u);
-                    const vseHonest = vse(cm[honestWinner], swRand, swOpt);
-                    accHonest[name] += vseHonest;
-                    trialVseHonest[name][li][ti][tr] = vseHonest;
-
-                    if (computeBoth) {
-                        const strategicWinner = strategicMethods[name](pu, l, u);
-                        const vseStrategic = vse(cm[strategicWinner], swRand, swOpt);
-                        accStrategic[name] += vseStrategic;
-                        trialVseStrategic[name][li][ti][tr] = vseStrategic;
+                for (const name of honestMethodNames) {
+                    const w = honestMethods[name](pu, l, u);
+                    const v = vse(cm[w], swRand, swOpt);
+                    accHonest[name] += v;
+                    trialVseHonest[name][li][ti][tr] = v;
+                }
+                if (computeBoth) {
+                    for (const name of strategicMethodNames) {
+                        const w = strategicMethods[name](pu, l, u);
+                        const v = vse(cm[w], swRand, swOpt);
+                        accStrategic[name] += v;
+                        trialVseStrategic[name][li][ti][tr] = v;
                     }
                 }
             }
 
-            for (const m of methodNames) {
-                resHonest[m][li][ti] = accHonest[m] / ntr;
-                if (computeBoth) resStrategic[m][li][ti] = accStrategic[m] / ntr;
-            }
+            for (const m of honestMethodNames) resHonest[m][li][ti] = accHonest[m] / ntr;
+            if (computeBoth) for (const m of strategicMethodNames) resStrategic[m][li][ti] = accStrategic[m] / ntr;
 
             gridDone++;
             workDone += computeBoth ? 2 : 1;
@@ -883,14 +904,17 @@ async function runGrid(params, onProgress) {
         }
     }
 
-    const enabledSubset = Object.fromEntries(methodNames.map(name => [name, true]));
+    const honestSubset = Object.fromEntries(honestMethodNames.map(name => [name, true]));
+    const strategicSubset = computeBoth
+        ? Object.fromEntries(strategicMethodNames.map(name => [name, true]))
+        : null;
 
     const honest = {
         res: resHonest,
         tVals,
         lVals,
         trialVse: trialVseHonest,
-        methods: enabledSubset,
+        methods: honestSubset,
         useStrategy: false,
     };
     const strategic = computeBoth
@@ -899,7 +923,7 @@ async function runGrid(params, onProgress) {
             tVals,
             lVals,
             trialVse: trialVseStrategic,
-            methods: enabledSubset,
+            methods: strategicSubset,
             useStrategy: true,
         }
         : null;
@@ -2478,7 +2502,7 @@ function getParams() {
     const normRaw = document.getElementById('norm')?.value || 'l1';
     const norm = ['l1', 'l2', 'linf'].includes(normRaw) ? normRaw : 'l1';
     const top2TrueUtilityRunoff = document.getElementById('ra-true-runoff')?.checked !== false;
-    const useLeaderRule = document.getElementById('approval-leader-rule')?.checked !== false;
+    const useLeaderRule = document.getElementById('approval-leader-rule')?.checked === true;
     const useTop2LeaderRule = document.getElementById('approval-top2-leader-rule')?.checked === true;
     return {
         nv: +document.getElementById('nv').value,
