@@ -111,9 +111,13 @@
                             checked /><span>Plurality</span></label>
                     <label class="toggle"><input type="checkbox" id="m-runoff-plurality" checked /><span>Plurality
                             Top 2</span></label>
+                    <label class="toggle"><input type="checkbox" id="m-condorcet-plurality-top3"
+                            checked /><span>Plurality Condorcet Top 3</span></label>
                     <label class="toggle"><input type="checkbox" id="m-approval" checked /><span>Approval</span></label>
                     <label class="toggle"><input type="checkbox" id="m-runoff-approval" checked /><span>Approval Top
                             2</span></label>
+                    <label class="toggle"><input type="checkbox" id="m-condorcet-approval-top3" checked /><span>Approval
+                            Condorcet Top 3</span></label>
                     <label class="toggle"><input type="checkbox" id="m-irv" checked /><span>RCV</span></label>
                     <label class="toggle"><input type="checkbox" id="m-star" checked /><span>STAR</span></label>
                     <label class="toggle"><input type="checkbox" id="m-condorcet"
@@ -132,10 +136,10 @@
             </div>
 
             <div class="display-toggle">
-                <h3>Top 2 runoff options</h3>
+                <h3>Top 2 / Top 3 runoff options</h3>
                 <div class="toggle-row">
                     <label class="toggle"><input type="checkbox" id="ra-true-runoff" checked /><span>Use perfect
-                            underlying utilities in Top 2 finalist runoff methods
+                            underlying utilities in runoff finalist comparisons
                             (default)</span></label>
                 </div>
             </div>
@@ -364,7 +368,8 @@
                 <summary>Ballot construction</summary>
                 <p>
                     <strong>Plurality:</strong> vote for the single top perceived candidate.<br />
-                    <strong>Plurality Top 2:</strong> uses the exact same first-round ballot as Plurality.<br />
+                    <strong>Plurality Top 2 / Plurality Condorcet Top 3:</strong> uses the exact same first-round ballot
+                    as Plurality.<br />
                     <strong>RCV / Borda / Condorcet:</strong> rank the considered set in order of $\tilde{u}_i$.<br />
                     <strong>Score / STAR:</strong> for each voter, first take that voter's perceived utilities
                     $\tilde{u}_i(c)$ over <em>all</em> candidates and find
@@ -376,7 +381,8 @@
                     candidates are assigned 5.)<br />
                     <strong>Approval:</strong> approve candidates in the considered set whose $\tilde{u}_i$ exceeds
                     the voter's global personal mean (computed over all $m$ candidates).<br />
-                    <strong>Approval Top 2:</strong> uses the exact same approval ballot as Approval.
+                    <strong>Approval Top 2 / Approval Condorcet Top 3:</strong> uses the exact same approval ballot as
+                    Approval.
                 </p>
             </details>
             <details>
@@ -387,6 +393,10 @@
                     supports whichever finalist they prefer between those two, and the finalist with more runoff
                     support wins. By default, this finalist comparison uses <em>true</em> underlying utilities as a
                     separate-election approximation. Turn off the toggle above to use perceived utilities instead.<br />
+                    <strong>Plurality Condorcet Top 3:</strong> top three by plurality totals advance; the Condorcet
+                    winner among those three (the one who wins both head-to-head matchups) is elected. If no
+                    Condorcet winner exists (a cycle), Minimax selects the finalist with the smallest worst pairwise
+                    defeat margin. Head-to-head comparisons use true utilities by default (same toggle as above).<br />
                     <strong>Approval:</strong> most approvals wins.<br />
                     <strong>Approval Top 2:</strong> top two by approval totals advance; in the runoff, each voter
                     supports whichever finalist they prefer between those two, and the finalist with more runoff
@@ -394,6 +404,9 @@
                     separate-election approximation: with only two finalists, voters can usually determine with near
                     certainty which finalist they actually prefer. Turn off the toggle above to use perceived
                     utilities instead.<br />
+                    <strong>Approval Condorcet Top 3:</strong> top three by approval totals advance; the Condorcet
+                    winner among those three is elected. If no Condorcet winner exists, Minimax is used as fallback.
+                    Head-to-head comparisons use true utilities by default (same toggle as above).<br />
                     <strong>Borda:</strong> ranked candidates get $K, K-1, \ldots, 1$ points (unranked get 0); highest
                     total wins.<br />
                     <strong>Score:</strong> highest total 0-5 score wins.<br />
@@ -427,16 +440,15 @@
                 </p>
             </details>
             <details>
-                <summary>Top 2 Runoff Utilities</summary>
+                <summary>Top 2 / Top 3 Runoff Utilities</summary>
                 <p>
-                    By default we use the voter's true utilities to determine runoff votes for both
-                    <strong>Plurality Top 2</strong> and <strong>Approval Top 2</strong>. This is done for Top 2
-                    runoff methods but not STAR for a simple reason. Unlike in STAR where the runoff is
-                    automatically calculated by the ballots submitted by the voters, Top 2 runoffs happen later and
-                    can benefit from this extra comparison time. It seems far more plausible that voters can be 100%
-                    sure which candidate they
-                    truly prefer if they have only two candidates to compare, and time after the initial voting allows
-                    them to make this determination accurately.
+                    By default we use the voter's true utilities to determine finalist comparisons for
+                    <strong>Plurality Top 2</strong>, <strong>Approval Top 2</strong>,
+                    <strong>Plurality Condorcet Top 3</strong>, and <strong>Approval Condorcet Top 3</strong>.
+                    Unlike STAR where the runoff is automatically calculated from submitted ballots, these runoffs
+                    happen later and can benefit from extra comparison time. It seems far more plausible that voters
+                    can determine their true preferences accurately when comparing only two or three finalists after
+                    the initial election.
                 </p>
                 <p>
                     This setting can be toggled in the simulation options.

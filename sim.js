@@ -28,11 +28,13 @@ function randn() {
 const METHOD_COLORS = {
     Plurality: '#e05555',
     'Plurality Top 2': '#cc6a5a',
+    'Plurality Condorcet Top 3': '#c44080',
     Approval: '#4ec96a',
     'Approval (Leader)': '#8edb47',
     'Approval Top 2': '#2fa07c',
     'Approval Top 2 (Leader)': '#47c4a0',
     'Approval Top 2 (Gen. Leader)': '#2adbbf',
+    'Approval Condorcet Top 3': '#7060d0',
     RCV: '#e09944',
     STAR: '#4ab8e0',
     Condorcet: '#9b6be0',
@@ -241,6 +243,39 @@ function condorcetWinnerFromRankMat(rm) {
         return worst;
     });
     return { winner: worstDefeat.indexOf(Math.min(...worstDefeat)), pairwise };
+}
+
+// Minimax Condorcet among a specified subset of candidates, using a utility matrix for pairwise comparisons.
+function condorcetAmong(matrix, candidates) {
+    const nv = matrix.length;
+    const m = candidates.length;
+    const pairwise = Array.from({ length: m }, () => new Array(m).fill(0));
+    for (let i = 0; i < m; i++) {
+        for (let j = i + 1; j < m; j++) {
+            const ci = candidates[i], cj = candidates[j];
+            let wi = 0, wj = 0;
+            for (let v = 0; v < nv; v++) {
+                if (matrix[v][ci] > matrix[v][cj]) wi++;
+                else if (matrix[v][cj] > matrix[v][ci]) wj++;
+            }
+            pairwise[i][j] = wi;
+            pairwise[j][i] = wj;
+        }
+    }
+    let bestIdx = 0;
+    let bestWorstDefeat = Infinity;
+    for (let i = 0; i < m; i++) {
+        let worstDefeat = -Infinity;
+        for (let j = 0; j < m; j++) {
+            if (i === j) continue;
+            worstDefeat = Math.max(worstDefeat, pairwise[j][i] - pairwise[i][j]);
+        }
+        if (worstDefeat < bestWorstDefeat) {
+            bestWorstDefeat = worstDefeat;
+            bestIdx = i;
+        }
+    }
+    return candidates[bestIdx];
 }
 
 // ── Voting methods ────────────────────────────────────────────────────────────
@@ -533,6 +568,25 @@ function condorcetWinner(pu, l, useStrategy = false, strategyShare = 1.0) {
     return { winner: condorcetWinnerFromRankMat(rm).winner, polls };
 }
 
+function condorcetTop3PluralityWinner(pu, useStrategy, strategyShare, useTrueUtilities, u) {
+    const nv = pu.length, nc = pu[0].length;
+    const { polls, counts } = pluralityWinner(pu, useStrategy, strategyShare);
+    const firstRoundTotals = Array.isArray(counts) ? counts : polls;
+    const sorted = Array.from({ length: nc }, (_, i) => i).sort((a, b) => firstRoundTotals[b] - firstRoundTotals[a]);
+    const top3 = sorted.slice(0, Math.min(3, nc));
+    const runoffMatrix = (useTrueUtilities && Array.isArray(u) && u.length === nv) ? u : pu;
+    return { winner: condorcetAmong(runoffMatrix, top3), polls };
+}
+
+function condorcetTop3ApprovalWinner(pu, l, useStrategy, strategyShare, useTrueUtilities, u, useLeaderRule) {
+    const nv = pu.length, nc = pu[0].length;
+    const result = approvalWinner(pu, l, useStrategy, strategyShare, useLeaderRule);
+    const sorted = Array.from({ length: nc }, (_, i) => i).sort((a, b) => result.totals[b] - result.totals[a]);
+    const top3 = sorted.slice(0, Math.min(3, nc));
+    const runoffMatrix = (useTrueUtilities && Array.isArray(u) && u.length === nv) ? u : pu;
+    return { winner: condorcetAmong(runoffMatrix, top3), polls: result.polls };
+}
+
 function irvWinner(pu, l, useStrategy = false, strategyShare = 1.0) {
     const nv = pu.length;
     const nc = pu[0].length;
@@ -584,8 +638,10 @@ function buildMethods(enabled, options = {}) {
     const all = {
         Plurality: (pu, l, u) => pluralityWinner(pu, useStrategy, strategyShare).winner,
         'Plurality Top 2': (pu, l, u) => runoffPluralityWinner(pu, useStrategy, strategyShare, useTrueUtilitiesTop2, u).winner,
+        'Plurality Condorcet Top 3': (pu, l, u) => condorcetTop3PluralityWinner(pu, useStrategy, strategyShare, useTrueUtilitiesTop2, u).winner,
         Approval: (pu, l, u) => approvalWinner(pu, l, useStrategy, strategyShare, false).winner,
         'Approval Top 2': (pu, l, u) => runoffApprovalWinner(pu, l, useStrategy, strategyShare, useTrueUtilitiesTop2, u, false, false).winner,
+        'Approval Condorcet Top 3': (pu, l, u) => condorcetTop3ApprovalWinner(pu, l, useStrategy, strategyShare, useTrueUtilitiesTop2, u, false).winner,
         RCV: (pu, l, u) => irvWinner(pu, l, useStrategy, strategyShare).winner,
         STAR: (pu, l, u) => starWinner(pu, l, useStrategy, strategyShare).winner,
         Condorcet: (pu, l, u) => condorcetWinner(pu, l, useStrategy, strategyShare).winner,
@@ -2486,7 +2542,9 @@ function getEnabledMethods() {
     return {
         Plurality: document.getElementById('m-plurality').checked,
         'Plurality Top 2': document.getElementById('m-runoff-plurality').checked,
+        'Plurality Condorcet Top 3': document.getElementById('m-condorcet-plurality-top3').checked,
         'Approval Top 2': document.getElementById('m-runoff-approval').checked,
+        'Approval Condorcet Top 3': document.getElementById('m-condorcet-approval-top3').checked,
         RCV: document.getElementById('m-irv').checked,
         Borda: document.getElementById('m-borda').checked,
         Score: document.getElementById('m-score').checked,
@@ -2983,7 +3041,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    ['m-plurality', 'm-runoff-plurality', 'm-approval', 'm-runoff-approval', 'm-irv', 'm-star', 'm-condorcet', 'm-score', 'm-borda'].forEach(id => {
+    ['m-plurality', 'm-runoff-plurality', 'm-condorcet-plurality-top3', 'm-approval', 'm-runoff-approval', 'm-condorcet-approval-top3', 'm-irv', 'm-star', 'm-condorcet', 'm-score', 'm-borda'].forEach(id => {
         const input = document.getElementById(id);
         if (!input) return;
         input.addEventListener('change', () => {
