@@ -371,8 +371,9 @@
                 <summary>Ballot construction</summary>
                 <p>
                     <strong>Plurality:</strong> vote for the single top perceived candidate.<br />
-                    <strong>Plurality Top 2 / Plurality Condorcet Top 3:</strong> uses the exact same first-round ballot
-                    as Plurality.<br />
+                    <strong>Plurality Top 2 / Plurality Condorcet Top 3:</strong> honest first-round ballot is the
+                    same as Plurality (vote for top perceived candidate). Strategic ballots differ — see
+                    <em>Plurality strategic voting</em> below.<br />
                     <strong>RCV / Borda / Condorcet:</strong> rank the considered set in order of $\tilde{u}_i$.<br />
                     <strong>Score / STAR:</strong> for each voter, first take that voter's perceived utilities
                     $\tilde{u}_i(c)$ over <em>all</em> candidates and find
@@ -479,6 +480,28 @@
                     <a href="https://github.com/eigentaylor/satisficing-voter-sim#strategic-voting-mode-browser-tool"
                         target="_blank" rel="noopener">README on GitHub</a>.
                 </p>
+            </details>
+            <details>
+                <summary>Plurality strategic voting (multi-winner first rounds)</summary>
+                <p>
+                    The plurality strategy generalizes based on how many candidates advance from the first round.
+                    In all cases, polls are derived from honest first-choice votes and the energy parameter ($\ell$)
+                    does not apply — plurality ballots are always a single vote.
+                </p>
+                <p>
+                    For $M$ candidates advancing, each strategic voter identifies the top $M+1$ candidates by
+                    poll totals and votes for whichever of those they prefer most:
+                </p>
+                <ul>
+                    <li><strong>Plurality ($M=1$):</strong> consider the top 2 (frontrunner and runner-up); vote for
+                        your favorite between them. This is classical strategic plurality voting.</li>
+                    <li><strong>Plurality Top 2 ($M=2$):</strong> consider the top 3; vote for your favorite among
+                        them. Since two candidates advance, there is now a reason to vote for a third-place candidate
+                        you prefer over either frontrunner — you can try to push them into the runoff.</li>
+                    <li><strong>Plurality Condorcet Top 3 ($M=3$):</strong> consider the top 4; vote for your
+                        favorite among them. The same logic applies: supporting a candidate outside the top three
+                        may lift them into the Condorcet stage.</li>
+                </ul>
             </details>
             <details>
                 <summary>Approval strategic voting: Laslier's Leader Rule</summary>
