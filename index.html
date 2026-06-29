@@ -178,7 +178,7 @@
             <div class="tab-bar">
                 <button class="tab-btn active" data-tab="slices">Axis Slices</button>
                 <button class="tab-btn" data-tab="heatmaps">Heat Maps</button>
-                <button class="tab-btn" data-tab="approval-diff">Approval Δ</button>
+                <button class="tab-btn" data-tab="approval-diff">Δ vs Baseline</button>
                 <button class="tab-btn" data-tab="robustness">Robustness</button>
                 <button class="tab-btn" data-tab="scenarios">Scenarios</button>
                 <button class="tab-btn" data-tab="scenario-overall">Scenario Improvement</button>
@@ -206,12 +206,18 @@
                 <div id="heatmap-container" class="heatmap-grid"></div>
             </div>
 
-            <!-- Approval diff -->
+            <!-- Baseline diff -->
             <div class="tab-pane" id="tab-approval-diff">
-                <p class="chart-desc">
-                    Approval VSE minus each other method across $(t,\ell)$ space.
-                    Green = Approval wins; red = other method wins.
-                </p>
+                <div class="chart-desc" style="display:flex;align-items:center;gap:0.75rem;flex-wrap:wrap">
+                    <span>
+                        Baseline VSE minus each other method across $(t,\ell)$ space.
+                        Green = baseline wins; red = other method wins.
+                    </span>
+                    <label style="display:flex;align-items:center;gap:0.4rem;white-space:nowrap">
+                        Baseline:
+                        <select id="diff-baseline" style="font-size:0.9rem;padding:2px 6px;border-radius:4px;border:1px solid #555;background:#1e1e2e;color:#cdd6f4"></select>
+                    </label>
+                </div>
                 <div id="diff-container" class="heatmap-grid"></div>
             </div>
 

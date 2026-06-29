@@ -2519,24 +2519,44 @@ function plotWeightedOverallImprovement(res, tVals, lVals, methods) {
     }
 }
 
-// ── Approval diff heatmaps ────────────────────────────────────────────────────
+// ── Baseline diff heatmaps ────────────────────────────────────────────────────
 
-function plotApprovalDiff(res, tVals, lVals, methods) {
-    if (!res['Approval']) return;
-    const others = Object.keys(methods).filter(m => m !== 'Approval');
-    if (!others.length) { document.getElementById('diff-container').innerHTML = '<p style="color:#555;padding:1rem">No other methods to compare.</p>'; return; }
+function plotBaselineDiff(res, tVals, lVals, methods, baseline) {
+    const container = document.getElementById('diff-container');
+    if (!baseline || !res[baseline]) {
+        container.innerHTML = '<p style="color:#555;padding:1rem">Baseline method not in results.</p>';
+        return;
+    }
+    const others = Object.keys(methods).filter(m => m !== baseline);
+    if (!others.length) {
+        container.innerHTML = '<p style="color:#555;padding:1rem">No other methods to compare.</p>';
+        return;
+    }
     const diffRes = {};
     const nl = lVals.length, nt = tVals.length;
     for (const m of others) {
         diffRes[m] = Array.from({ length: nl }, (_, li) =>
-            new Float64Array(nt).map((_, ti) => res['Approval'][li][ti] - res[m][li][ti])
+            new Float64Array(nt).map((_, ti) => res[baseline][li][ti] - res[m][li][ti])
         );
     }
     buildHeatmapContainer('diff-container', diffRes, Object.fromEntries(others.map(m => [m, true])),
-        v => diverging(2 * v - 1),  // map normalized [0,1] to [-1,1]
+        v => diverging(2 * v - 1),
         -0.15, 0.15,
-        m => `Approval − ${m}`
+        m => `${baseline} − ${m}`
     );
+}
+
+function populateDiffBaseline(methods, currentBaseline) {
+    const sel = document.getElementById('diff-baseline');
+    const methodNames = Object.keys(methods);
+    // Preserve selection if it's still valid; default to Approval if present, else first.
+    const preferred = currentBaseline && methods[currentBaseline] ? currentBaseline
+        : methods['Approval'] ? 'Approval'
+        : methodNames[0];
+    sel.innerHTML = methodNames.map(m =>
+        `<option value="${m}"${m === preferred ? ' selected' : ''}>${m}</option>`
+    ).join('');
+    return preferred;
 }
 
 // ── UI wiring ─────────────────────────────────────────────────────────────────
@@ -2846,7 +2866,8 @@ function renderChartsFromState(state) {
     plotWeightedOverallImprovement(res, tVals, lVals, methods);
     plotScenarioOverallImprovement(res, tVals, lVals, methods, state.trialVse);
     renderHypothesisTests(state);
-    plotApprovalDiff(res, tVals, lVals, methods);
+    const baseline = populateDiffBaseline(methods, document.getElementById('diff-baseline')?.value);
+    plotBaselineDiff(res, tVals, lVals, methods, baseline);
     updateStarLegendVisibility();
 }
 
@@ -3097,6 +3118,15 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
         document.getElementById('tab-' + btn.dataset.tab).classList.add('active');
         requestAnimationFrame(resizeAllCharts);
     });
+});
+
+// Baseline diff dropdown
+document.getElementById('diff-baseline')?.addEventListener('change', () => {
+    const state = getActiveViewState();
+    if (!state) return;
+    const { res, tVals, lVals, methods } = state;
+    const baseline = document.getElementById('diff-baseline').value;
+    plotBaselineDiff(res, tVals, lVals, methods, baseline);
 });
 
 function setRunning(isRunning) {
