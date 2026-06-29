@@ -632,6 +632,7 @@ function buildMethods(enabled, options = {}) {
     const useStrategy = Boolean(options.useStrategy);
     const strategyShare = Number.isFinite(options.strategyShare) ? options.strategyShare : 1.0;
     const useTrueUtilitiesTop2 = options.useTrueUtilitiesTop2 !== false;
+    const useTrueUtilitiesTop3 = options.useTrueUtilitiesTop3 !== false;
     const useLeaderRule = Boolean(options.useLeaderRule);
     const useTop2LeaderRule = Boolean(options.useTop2LeaderRule);
 
@@ -639,10 +640,10 @@ function buildMethods(enabled, options = {}) {
     const all = {
         Plurality: (pu, l, u) => pluralityWinner(pu, useStrategy, strategyShare).winner,
         'Plurality Top 2': (pu, l, u) => runoffPluralityWinner(pu, useStrategy, strategyShare, useTrueUtilitiesTop2, u).winner,
-        'Plurality Condorcet Top 3': (pu, l, u) => condorcetTop3PluralityWinner(pu, useStrategy, strategyShare, useTrueUtilitiesTop2, u).winner,
+        'Plurality Condorcet Top 3': (pu, l, u) => condorcetTop3PluralityWinner(pu, useStrategy, strategyShare, useTrueUtilitiesTop3, u).winner,
         Approval: (pu, l, u) => approvalWinner(pu, l, useStrategy, strategyShare, false).winner,
         'Approval Top 2': (pu, l, u) => runoffApprovalWinner(pu, l, useStrategy, strategyShare, useTrueUtilitiesTop2, u, false, false).winner,
-        'Approval Condorcet Top 3': (pu, l, u) => condorcetTop3ApprovalWinner(pu, l, useStrategy, strategyShare, useTrueUtilitiesTop2, u, false).winner,
+        'Approval Condorcet Top 3': (pu, l, u) => condorcetTop3ApprovalWinner(pu, l, useStrategy, strategyShare, useTrueUtilitiesTop3, u, false).winner,
         RCV: (pu, l, u) => irvWinner(pu, l, useStrategy, strategyShare).winner,
         STAR: (pu, l, u) => starWinner(pu, l, useStrategy, strategyShare).winner,
         Condorcet: (pu, l, u) => condorcetWinner(pu, l, useStrategy, strategyShare).winner,
@@ -664,6 +665,7 @@ function buildMethods(enabled, options = {}) {
                 out['Approval Top 2 (Leader)'] = (pu, l, u) => runoffApprovalWinner(pu, l, true, strategyShare, useTrueUtilitiesTop2, u, true, false).winner;
             }
         }
+
     }
 
     return out;
@@ -2560,7 +2562,8 @@ function getParams() {
     const enabledMethods = getEnabledMethods();
     const normRaw = document.getElementById('norm')?.value || 'l1';
     const norm = ['l1', 'l2', 'linf'].includes(normRaw) ? normRaw : 'l1';
-    const top2TrueUtilityRunoff = document.getElementById('ra-true-runoff')?.checked !== false;
+    const top2TrueUtilityRunoff = document.getElementById('ra-true-runoff-top2')?.checked !== false;
+    const top3TrueUtilityRunoff = document.getElementById('ra-true-runoff-top3')?.checked !== false;
     const useLeaderRule = document.getElementById('approval-leader-rule')?.checked === true;
     const useTop2LeaderRule = document.getElementById('approval-top2-leader-rule')?.checked === true;
     return {
@@ -2571,6 +2574,7 @@ function getParams() {
         nd: +document.getElementById('nd').value,
         norm,
         top2TrueUtilityRunoff,
+        top3TrueUtilityRunoff,
         useLeaderRule,
         useTop2LeaderRule,
         preferredMode,
@@ -2589,6 +2593,7 @@ function paramsSignature(params) {
         params.nd,
         params.norm,
         params.top2TrueUtilityRunoff ? 'top2TrueRunoff=1' : 'top2TrueRunoff=0',
+        params.top3TrueUtilityRunoff ? 'top3TrueRunoff=1' : 'top3TrueRunoff=0',
         params.useLeaderRule ? 'leaderRule=1' : 'leaderRule=0',
         params.useTop2LeaderRule ? 'top2LeaderRule=1' : 'top2LeaderRule=0',
         orderedEnabledMethods(params.enabledMethods).join(','),
@@ -2685,6 +2690,7 @@ function isDefaultParamSet(params) {
     if (params.nv !== 85 || params.nc !== 8 || params.ntr !== 200 || params.ng !== 8 || params.nd !== 2) return false;
     if ((params.norm || 'l1') !== 'l1') return false;
     if (params.top2TrueUtilityRunoff !== true) return false;
+    if (params.top3TrueUtilityRunoff !== true) return false;
     const defaults = {
         Plurality: true,
         'Plurality Top 2': true,
@@ -2713,6 +2719,7 @@ function saveBundleToCache(cacheKey, params) {
             nd: params.nd,
             norm: params.norm,
             top2TrueUtilityRunoff: params.top2TrueUtilityRunoff,
+            top3TrueUtilityRunoff: params.top3TrueUtilityRunoff,
             enabledMethods: params.enabledMethods,
         },
         modes: {
@@ -2745,6 +2752,7 @@ function exportCurrentCacheEntryFromMemory() {
             nd: params.nd,
             norm: params.norm,
             top2TrueUtilityRunoff: params.top2TrueUtilityRunoff,
+            top3TrueUtilityRunoff: params.top3TrueUtilityRunoff,
             enabledMethods: params.enabledMethods,
         },
         modes: {
@@ -2888,12 +2896,14 @@ async function runSimulation(options = {}) {
         useStrategy: false,
         strategyShare: params.strategyShare,
         useTrueUtilitiesTop2: params.top2TrueUtilityRunoff,
+        useTrueUtilitiesTop3: params.top3TrueUtilityRunoff,
         useLeaderRule: false,
     });
     params.strategicMethods = buildMethods(params.enabledMethods, {
         useStrategy: true,
         strategyShare: params.strategyShare,
         useTrueUtilitiesTop2: params.top2TrueUtilityRunoff,
+        useTrueUtilitiesTop3: params.top3TrueUtilityRunoff,
         useLeaderRule: params.useLeaderRule,
         useTop2LeaderRule: params.useTop2LeaderRule,
     });
@@ -3059,9 +3069,8 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    const runoffSourceToggle = document.getElementById('ra-true-runoff');
-    if (runoffSourceToggle) {
-        runoffSourceToggle.addEventListener('change', () => {
+    for (const id of ['ra-true-runoff-top2', 'ra-true-runoff-top3']) {
+        document.getElementById(id)?.addEventListener('change', () => {
             clearInMemoryResults();
             updateModeSwitcherUI();
         });

@@ -138,8 +138,11 @@
             <div class="display-toggle">
                 <h3>Top 2 / Top 3 runoff options</h3>
                 <div class="toggle-row">
-                    <label class="toggle"><input type="checkbox" id="ra-true-runoff" checked /><span>Use perfect
-                            underlying utilities in runoff finalist comparisons
+                    <label class="toggle"><input type="checkbox" id="ra-true-runoff-top2" checked /><span>Use perfect
+                            underlying utilities in Top 2 runoff comparisons
+                            (default)</span></label>
+                    <label class="toggle"><input type="checkbox" id="ra-true-runoff-top3" checked /><span>Use perfect
+                            underlying utilities in Top 3 runoff comparisons
                             (default)</span></label>
                 </div>
             </div>
@@ -447,11 +450,14 @@
                     <strong>Plurality Condorcet Top 3</strong>, and <strong>Approval Condorcet Top 3</strong>.
                     Unlike STAR where the runoff is automatically calculated from submitted ballots, these runoffs
                     happen later and can benefit from extra comparison time. It seems far more plausible that voters
-                    can determine their true preferences accurately when comparing only two or three finalists after
-                    the initial election.
+                    can determine their true preferences accurately when comparing only two finalists than three.
                 </p>
                 <p>
-                    This setting can be toggled in the simulation options.
+                    These settings can be toggled independently in the simulation options. The Top 2 case (a head-to-head
+                    comparison) is a strong candidate for perfect utility: voters have ample time and a simple binary
+                    choice. The Top 3 case is more demanding — voters must rank or compare three candidates, which may
+                    still be subject to perceived-utility noise — so you may want to disable it to model a more realistic
+                    scenario.
                 </p>
             </details>
             <details>
