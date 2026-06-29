@@ -280,25 +280,26 @@ function condorcetAmong(matrix, candidates) {
 
 // ── Voting methods ────────────────────────────────────────────────────────────
 
-function pluralityWinner(pu, useStrategy = false, strategyShare = 1.0) {
+function pluralityWinner(pu, useStrategy = false, strategyShare = 1.0, nWinners = 1) {
     const nv = pu.length, nc = pu[0].length;
     const top1 = pu.map(row => argmax(row));
     const polls = bincount(top1, nc);
     if (!useStrategy) return { winner: argmax(polls), polls, counts: polls.slice() };
 
-    const [front, target] = frontAndTarget(polls);
+    const sorted = Array.from({ length: nc }, (_, i) => i).sort((a, b) => polls[b] - polls[a]);
+    const topConsider = sorted.slice(0, Math.min(nWinners + 1, nc));
     const stratMask = strategicVoterMask(nv, strategyShare);
     const top1Strat = top1.slice();
     for (let i = 0; i < nv; i++) {
         if (!stratMask[i]) continue;
-        top1Strat[i] = pu[i][target] > pu[i][front] ? target : front;
+        top1Strat[i] = topConsider.reduce((best, c) => pu[i][c] > pu[i][best] ? c : best);
     }
     const counts = bincount(top1Strat, nc);
     return { winner: argmax(counts), polls, counts };
 }
 
 function runoffPluralityWinner(pu, useStrategy = false, strategyShare = 1.0, useTrueUtilitiesTop2 = true, u = null) {
-    const { polls, counts } = pluralityWinner(pu, useStrategy, strategyShare);
+    const { polls, counts } = pluralityWinner(pu, useStrategy, strategyShare, 2);
     const firstRoundTotals = Array.isArray(counts) ? counts : polls;
     const nc = firstRoundTotals.length;
     const sorted = Array.from({ length: nc }, (_, i) => i).sort((a, b) => firstRoundTotals[b] - firstRoundTotals[a]);
@@ -570,7 +571,7 @@ function condorcetWinner(pu, l, useStrategy = false, strategyShare = 1.0) {
 
 function condorcetTop3PluralityWinner(pu, useStrategy, strategyShare, useTrueUtilities, u) {
     const nv = pu.length, nc = pu[0].length;
-    const { polls, counts } = pluralityWinner(pu, useStrategy, strategyShare);
+    const { polls, counts } = pluralityWinner(pu, useStrategy, strategyShare, 3);
     const firstRoundTotals = Array.isArray(counts) ? counts : polls;
     const sorted = Array.from({ length: nc }, (_, i) => i).sort((a, b) => firstRoundTotals[b] - firstRoundTotals[a]);
     const top3 = sorted.slice(0, Math.min(3, nc));
