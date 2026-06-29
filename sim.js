@@ -2858,6 +2858,11 @@ function updateStarLegendVisibility() {
 
 function renderChartsFromState(state) {
     const { res, tVals, lVals, methods } = state;
+    const modeLabel = currentVotingModeLabel();
+    const heatmapModeEl = document.getElementById('heatmap-mode-label');
+    if (heatmapModeEl) heatmapModeEl.textContent = modeLabel + '.';
+    const diffModeEl = document.getElementById('diff-mode-label');
+    if (diffModeEl) diffModeEl.textContent = modeLabel + '.';
     plotSlices(res, tVals, lVals, methods);
     buildHeatmapContainer('heatmap-container', res, methods, viridis, 0, 1, null);
     plotRobustness(res, tVals, lVals, methods);
